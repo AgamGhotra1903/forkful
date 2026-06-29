@@ -1,0 +1,252 @@
+version: '3.8'
+
+services:
+  # ── INFRASTRUCTURE ──────────────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7
+    container_name: forkful_mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-admin}
+      MONGO_INITDB_DATABASE: forkful
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test -u ${MONGO_USER:-admin} -p ${MONGO_PASSWORD:-admin} || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - forkful
+
+  redis:
+    image: redis:7-alpine
+    container_name: forkful_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: redis-cli ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - forkful
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: forkful_rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBIT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASS:-guest}
+    volumes:
+      - rabbit_data:/var/lib/rabbitmq
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - forkful
+
+  # ── MICROSERVICES ───────────────────────────────────────────────────────────
+  auth:
+    build:
+      context: ./services/auth
+      dockerfile: Dockerfile
+    container_name: forkful_auth
+    ports:
+      - "5001:5001"
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 5001
+      MONGO_URL: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-admin}@mongodb:27017/forkful?authSource=admin
+      JWT_SEC: ${JWT_SEC:-your-secret-key}
+      RABBIT_URL: amqp://${RABBIT_USER:-guest}:${RABBIT_PASS:-guest}@rabbitmq:5672
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: wget --quiet --tries=1 --spider http://localhost:5001/health || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - forkful
+
+  restaurant:
+    build:
+      context: ./services/restaurant
+      dockerfile: Dockerfile
+    container_name: forkful_restaurant
+    ports:
+      - "5002:5002"
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 5002
+      MONGO_URL: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-admin}@mongodb:27017/forkful?authSource=admin
+      JWT_SEC: ${JWT_SEC:-your-secret-key}
+      RABBIT_URL: amqp://${RABBIT_USER:-guest}:${RABBIT_PASS:-guest}@rabbitmq:5672
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: wget --quiet --tries=1 --spider http://localhost:5002/health || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - forkful
+
+  rider:
+    build:
+      context: ./services/rider
+      dockerfile: Dockerfile
+    container_name: forkful_rider
+    ports:
+      - "5003:5003"
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 5003
+      MONGO_URL: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-admin}@mongodb:27017/forkful?authSource=admin
+      JWT_SEC: ${JWT_SEC:-your-secret-key}
+      RABBIT_URL: amqp://${RABBIT_USER:-guest}:${RABBIT_PASS:-guest}@rabbitmq:5672
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: wget --quiet --tries=1 --spider http://localhost:5003/health || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - forkful
+
+  admin:
+    build:
+      context: ./services/admin
+      dockerfile: Dockerfile
+    container_name: forkful_admin
+    ports:
+      - "5004:5004"
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 5004
+      MONGO_URL: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-admin}@mongodb:27017/forkful?authSource=admin
+      JWT_SEC: ${JWT_SEC:-your-secret-key}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: wget --quiet --tries=1 --spider http://localhost:5004/health || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - forkful
+
+  utils:
+    build:
+      context: ./services/utils
+      dockerfile: Dockerfile
+    container_name: forkful_utils
+    ports:
+      - "5005:5005"
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 5005
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+    healthcheck:
+      test: wget --quiet --tries=1 --spider http://localhost:5005/health || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - forkful
+
+  realtime:
+    build:
+      context: ./services/realtime
+      dockerfile: Dockerfile
+    container_name: forkful_realtime
+    ports:
+      - "5006:5006"
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 5006
+      JWT_SEC: ${JWT_SEC:-your-secret-key}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: wget --quiet --tries=1 --spider http://localhost:5006/health || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - forkful
+
+  # ── NGINX REVERSE PROXY ──────────────────────────────────────────────────────
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: forkful_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - auth
+      - restaurant
+      - rider
+      - admin
+      - utils
+      - realtime
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - forkful
+
+  # ── FRONTEND ─────────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: forkful_frontend
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:80}
+      VITE_SOCKET_URL: ${VITE_SOCKET_URL:-http://localhost:80}
+    depends_on:
+      - nginx
+    networks:
+      - forkful
+
+volumes:
+  mongo_data:
+  redis_data:
+  rabbit_data:
+
+networks:
+  forkful:
+    driver: bridge

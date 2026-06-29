@@ -1,0 +1,11 @@
+{
+  "name": "forkful",
+  "version": "1.0.0",
+  "description": "Forkful - Full-stack food delivery platform",
+  "private": true,
+  "scripts": {
+    "install-all": "for d in services/auth services/restaurant services/rider services/admin services/utils services/realtime frontend; do echo \"Installing $d...\"; (cd \"$d\" && npm install); done",
+    "dev": "./start-all.sh",
+    "stop": "./stop-all.sh"
+  }
+}
