@@ -5,6 +5,9 @@ export interface IUser extends Document {
   email: string;
   image: string;
   role: string;
+  dietaryPreferences?: string[];
+  allergies?: string[];
+  healthGoals?: string;
 }
 
 const schema: Schema<IUser> = new Schema(
@@ -26,6 +29,18 @@ const schema: Schema<IUser> = new Schema(
       type: String,
       default: null,
     },
+    dietaryPreferences: {
+      type: [String],
+      default: [],
+    },
+    allergies: {
+      type: [String],
+      default: [],
+    },
+    healthGoals: {
+      type: String,
+      default: "",
+    },
   },
   {
     timestamps: true,
@@ -34,5 +49,5 @@ const schema: Schema<IUser> = new Schema(
 
 // Mongoose models are shared globally per connection.
 // If the model is already compiled, use that model; otherwise compile it.
-const User = mongoose.models.User || mongoose.model<IUser>("User", schema);
+const User = (mongoose.models.User as mongoose.Model<IUser>) || mongoose.model<IUser>("User", schema);
 export default User;

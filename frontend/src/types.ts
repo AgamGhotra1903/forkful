@@ -7,6 +7,9 @@ export interface User {
   image: string;
   role: string;
   rewardPoints?: number;
+  dietaryPreferences?: string[];
+  allergies?: string[];
+  healthGoals?: string;
 }
 
 export interface LocationData {

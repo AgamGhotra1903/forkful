@@ -34,6 +34,15 @@ const Cart = () => {
   // Recommendations & Pairings state
   const [pairings, setPairings] = useState<IMenuItem[]>([]);
 
+  // AI Cart Health Check state
+  const [aiAnalysis, setAiAnalysis] = useState<{
+    matchScore: number;
+    analysis: string;
+    warnings: string[];
+    suggestions: string[];
+  } | null>(null);
+  const [analyzingCart, setAnalyzingCart] = useState(false);
+
   useEffect(() => {
     const fetchMenuAndPairings = async () => {
       if (!cart || cart.length === 0) return;
@@ -84,6 +93,36 @@ const Cart = () => {
     };
 
     fetchMenuAndPairings();
+  }, [cart]);
+
+  useEffect(() => {
+    const runAnalysis = async () => {
+      if (!cart || cart.length === 0) {
+        setAiAnalysis(null);
+        return;
+      }
+      setAnalyzingCart(true);
+      try {
+        const payload = cart.map(c => {
+          const item = c.itemId as IMenuItem;
+          return { 
+            name: item.name, 
+            description: item.description || "" 
+          };
+        });
+        const { data } = await axios.post(
+          `${restaurantService}/api/ai/analyze-cart`,
+          { items: payload },
+          { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+        );
+        setAiAnalysis(data);
+      } catch (err) {
+        console.error("Cart analysis failed:", err);
+      } finally {
+        setAnalyzingCart(false);
+      }
+    };
+    runAnalysis();
   }, [cart]);
 
   if (!cart || cart.length === 0) {
@@ -362,6 +401,151 @@ const Cart = () => {
           })}
         </div>
 
+        {/* ── AI Diet & Health Check ── */}
+        {((user?.dietaryPreferences && user.dietaryPreferences.length > 0) ||
+          (user?.allergies && user.allergies.length > 0) ||
+          user?.healthGoals) && (
+          <div 
+            className="p-5 space-y-4 glass-card transition-all duration-300 reveal border"
+            style={{
+              borderColor: "rgba(255, 87, 51, 0.35)",
+              boxShadow: "0 12px 40px 0 rgba(255, 87, 51, 0.08), inset 0 0 18px 0 rgba(255, 87, 51, 0.05)",
+              background: "linear-gradient(135deg, rgba(15,23,42,0.4) 0%, rgba(255,87,51,0.03) 100%)",
+              borderRadius: "var(--radius-xl)"
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div 
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-xl select-none"
+                  style={{ 
+                    background: "linear-gradient(135deg, rgba(255,87,51,0.22) 0%, rgba(255,130,77,0.1) 100%)",
+                    border: "1px solid rgba(255,87,51,0.3)",
+                    boxShadow: "0 0 12px rgba(255,87,51,0.15)"
+                  }}
+                >
+                  🍳
+                </div>
+                <div>
+                  <h2 className="text-xs font-bold font-display tracking-wide uppercase flex items-center gap-1.5" style={{ color: "var(--color-ink)", fontFamily: "var(--font-display)" }}>
+                    AI Diet & Health Check
+                  </h2>
+                  <p className="text-[9px]" style={{ color: "var(--color-manifest)" }}>
+                    Real-time analysis against your active dietary locks and health goals.
+                  </p>
+                </div>
+              </div>
+
+              {/* Pulsing Active Indicator */}
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/25">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className={`absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 ${analyzingCart ? "animate-ping" : ""}`}></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                </span>
+                <span className="text-[8px] font-bold text-emerald-400 uppercase tracking-widest font-mono">
+                  {analyzingCart ? "Analyzing..." : "Monitored"}
+                </span>
+              </div>
+            </div>
+
+            {/* Loading / Results display */}
+            {analyzingCart && !aiAnalysis ? (
+              <div className="py-6 flex flex-col items-center justify-center space-y-2">
+                <div className="w-7 h-7 rounded-full border-2 border-dashed border-orange-500 animate-spin" />
+                <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Consulting AI Dietitian...</p>
+              </div>
+            ) : aiAnalysis ? (
+              <div className="space-y-4">
+                
+                {/* Score & Rating Bar */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-[9px] font-bold uppercase tracking-wider font-mono text-slate-400">Dietary Compatibility Fit</span>
+                    <span 
+                      className="text-sm font-black font-mono text-orange-500 transition-all duration-300"
+                      style={{ textShadow: "0 0 10px rgba(255,87,51,0.35)" }}
+                    >
+                      {aiAnalysis.matchScore}% Match
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-200 dark:bg-slate-900 h-2 rounded-full overflow-hidden border border-white/5">
+                    <div 
+                      className="h-full rounded-full transition-all duration-500 shadow-inner" 
+                      style={{ 
+                        width: `${aiAnalysis.matchScore}%`,
+                        background: aiAnalysis.matchScore >= 80 
+                          ? "linear-gradient(90deg, #10B981, #059669)" 
+                          : aiAnalysis.matchScore >= 50 
+                            ? "linear-gradient(90deg, #F59E0B, #D97706)" 
+                            : "linear-gradient(90deg, #EF4444, #DC2626)",
+                        boxShadow: "0 0 8px currentColor"
+                      }} 
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-700 dark:text-slate-300 font-medium leading-relaxed mt-2" style={{ fontFamily: "var(--font-body)" }}>
+                    {aiAnalysis.analysis}
+                  </p>
+                </div>
+
+                {/* Warnings Container */}
+                {aiAnalysis.warnings && aiAnalysis.warnings.length > 0 && (
+                  <div 
+                    className="p-3.5 rounded-2xl border space-y-1"
+                    style={{ 
+                      backgroundColor: "rgba(239,68,68,0.04)", 
+                      borderColor: "rgba(239,68,68,0.22)",
+                      boxShadow: "inset 0 0 8px rgba(239,68,68,0.02)"
+                    }}
+                  >
+                    <span className="text-[8px] font-bold uppercase tracking-widest font-mono text-red-500 flex items-center gap-1.5">
+                      <span className="relative flex h-1.5 w-1.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
+                      </span>
+                      Warnings / Mismatches
+                    </span>
+                    <div className="space-y-1.5 pt-1">
+                      {aiAnalysis.warnings.map((warning, idx) => (
+                        <p key={idx} className="text-[10px] text-red-600 dark:text-red-400 font-bold flex items-center gap-1.5 leading-snug">
+                          {warning}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Suggestions Container */}
+                {aiAnalysis.suggestions && aiAnalysis.suggestions.length > 0 && (
+                  <div 
+                    className="p-3.5 rounded-2xl border space-y-1"
+                    style={{ 
+                      backgroundColor: "rgba(245,158,11,0.03)", 
+                      borderColor: "rgba(245,158,11,0.22)",
+                      boxShadow: "inset 0 0 8px rgba(245,158,11,0.02)"
+                    }}
+                  >
+                    <span className="text-[8px] font-bold uppercase tracking-widest font-mono text-amber-500 flex items-center gap-1.5">
+                      <span className="relative flex h-1.5 w-1.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500"></span>
+                      </span>
+                      AI Target Suggestions
+                    </span>
+                    <div className="space-y-1.5 pt-1">
+                      {aiAnalysis.suggestions.map((suggestion, idx) => (
+                        <p key={idx} className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1.5 leading-snug">
+                          💡 {suggestion}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            ) : null}
+          </div>
+        )}
+
         {/* ── Coupon Engine Validation ── */}
         <div className="p-5 rounded-3xl glass-card border space-y-4" style={{ borderColor: "var(--color-rule)" }}>
           <label htmlFor="coupon-input" className="text-[10px] font-body tracking-wider uppercase font-bold text-slate-400 block">
@@ -562,8 +746,8 @@ const Cart = () => {
 
       {/* ── Fixed bottom CTA ── */}
       <div
-        className="fixed bottom-0 left-0 right-0 z-40 glass-panel animate-slide-up"
-        style={{ borderTop: "1px solid var(--color-rule)" }}
+        className="fixed bottom-16 md:bottom-0 left-0 right-0 z-40 glass-panel animate-slide-up"
+        style={{ borderTop: "1px solid var(--color-rule)", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
         {/* Logistics Prominence Timer */}
         <div className="text-center py-2 bg-slate-900 dark:bg-black text-white text-[9px] font-body font-bold tracking-wider uppercase flex items-center justify-center gap-1.5 border-b" style={{ borderColor: "var(--color-rule)" }}>

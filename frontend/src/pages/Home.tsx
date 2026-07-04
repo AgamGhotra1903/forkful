@@ -3,7 +3,7 @@ import { useAppData } from "../context/AppContext";
 import { useEffect, useState } from "react";
 import type { IRestaurant } from "../types";
 import axios from "axios";
-import { restaurantService } from "../main";
+import { authService, restaurantService } from "../main";
 import { AISearchBar } from "../components/AISearchBar";
 import { Skeleton, LiveIndicator } from "../components/ui";
 import toast from "react-hot-toast";
@@ -104,7 +104,7 @@ const ActiveOrderTile = ({
         exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 80 }}
         transition={{ type: "spring", stiffness: 320, damping: 30 }}
         onClick={onToggle}
-        className="fixed bottom-6 left-1/2 z-50 cursor-pointer"
+        className="fixed bottom-20 md:bottom-6 left-1/2 z-50 cursor-pointer"
         style={{
           x: "-50%",
           transform: "translateX(-50%)",
@@ -602,8 +602,48 @@ const PromoBanner = ({ banner }: { banner: typeof PROMO_BANNERS[0] }) => (
 );
 
 const Home = () => {
-  const { location, user, city } = useAppData();
+  const { location, user, setUser, city } = useAppData();
   const navigate = useNavigate();
+
+  const [dietaryPrefs, setDietaryPrefs] = useState<string[]>(user?.dietaryPreferences || []);
+  const [allergyList, setAllergyList] = useState<string[]>(user?.allergies || []);
+  const [healthGoals, setHealthGoals] = useState<string>(user?.healthGoals || "");
+  const [newAllergy, setNewAllergy] = useState<string>("");
+  const [, setSavingProfile] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (user) {
+      setDietaryPrefs(user.dietaryPreferences || []);
+      setAllergyList(user.allergies || []);
+      setHealthGoals(user.healthGoals || "");
+    }
+  }, [user]);
+
+  const savePreferences = async (updatedPrefs?: string[], updatedAllergies?: string[], updatedGoals?: string) => {
+    setSavingProfile(true);
+    try {
+      const prefs = updatedPrefs !== undefined ? updatedPrefs : dietaryPrefs;
+      const allergiesVal = updatedAllergies !== undefined ? updatedAllergies : allergyList;
+      const goals = updatedGoals !== undefined ? updatedGoals : healthGoals;
+
+      const { data } = await axios.put(
+        `${authService}/api/auth/profile`,
+        { dietaryPreferences: prefs, allergies: allergiesVal, healthGoals: goals },
+        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+      );
+      
+      if (data.token) {
+        localStorage.setItem("token", data.token);
+      }
+      setUser(data.user);
+      toast.success("AI Profile updated");
+    } catch (err: any) {
+      console.error("Failed to update AI profile:", err);
+      toast.error("Failed to update AI profile");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
   const shouldReduceMotion = useReducedMotion();
   const [searchParams, setSearchParams] = useSearchParams();
   const search = searchParams.get("search") || "";
@@ -1406,6 +1446,203 @@ const Home = () => {
               >
                 Reward Details
               </button>
+            </div>
+          </div>
+
+          {/* ── AI Dietary & Health Profile ── */}
+          <div 
+            className="p-5 mt-5 space-y-4 glass-card transition-all duration-300 reveal"
+            style={{
+              border: "1px solid rgba(255, 87, 51, 0.25)",
+              boxShadow: "0 8px 32px 0 rgba(255, 87, 51, 0.05), inset 0 0 12px 0 rgba(255, 87, 51, 0.03)",
+              background: "linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,87,51,0.02) 100%)",
+              borderRadius: "var(--radius-xl)"
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div 
+                  className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-lg select-none"
+                  style={{ 
+                    background: "linear-gradient(135deg, rgba(255,87,51,0.2) 0%, rgba(255,130,77,0.08) 100%)",
+                    border: "1px solid rgba(255,87,51,0.2)"
+                  }}
+                >
+                  🍳
+                </div>
+                <div>
+                  <h2 className="text-xs font-bold font-display tracking-wide uppercase" style={{ color: "var(--color-ink)", fontFamily: "var(--font-display)" }}>
+                    AI Dietary & Health Profile
+                  </h2>
+                  <p className="text-[9px]" style={{ color: "var(--color-manifest)" }}>
+                    Dynamic RAG engine filters menus and intercepts allergens.
+                  </p>
+                </div>
+              </div>
+              {/* Pulsing Active Indicator */}
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                </span>
+                <span className="text-[8px] font-bold text-emerald-500 uppercase tracking-widest font-mono">Active</span>
+              </div>
+            </div>
+
+            {/* Dietary Preferences */}
+            <div className="space-y-2">
+              <label className="text-[9px] font-bold uppercase tracking-wider font-mono block" style={{ color: "var(--color-ghost)" }}>
+                Dietary Preferences
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {["Vegetarian", "Vegan", "Keto", "Gluten-Free", "Low-Carb", "Halal"].map((pref) => {
+                  const active = dietaryPrefs.includes(pref);
+                  return (
+                    <button
+                      key={pref}
+                      type="button"
+                      onClick={() => {
+                        const next = active
+                          ? dietaryPrefs.filter((p) => p !== pref)
+                          : [...dietaryPrefs, pref];
+                        setDietaryPrefs(next);
+                        savePreferences(next, undefined, undefined);
+                      }}
+                      className="px-2.5 py-1 rounded-full text-[9px] font-bold transition-all duration-200 border cursor-pointer animate-fade-in"
+                      style={{
+                        backgroundColor: active ? "rgba(255,87,51,0.18)" : "rgba(255,255,255,0.02)",
+                        borderColor: active ? "#FF5733" : "rgba(255,255,255,0.06)",
+                        color: active ? "#FF824D" : "var(--color-manifest)",
+                        boxShadow: active ? "0 2px 10px rgba(255,87,51,0.15)" : "none"
+                      }}
+                    >
+                      {active ? "✓ " : ""}{pref}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Allergies */}
+            <div className="space-y-2">
+              <label className="text-[9px] font-bold uppercase tracking-wider font-mono block" style={{ color: "var(--color-ghost)" }}>
+                Allergen Profile
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {allergyList.length === 0 ? (
+                  <span className="text-[10px] italic font-body" style={{ color: "var(--color-ghost)" }}>
+                    No allergen locks active. Type below to add.
+                  </span>
+                ) : (
+                  allergyList.map((allergy) => (
+                    <span
+                      key={allergy}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-bold border"
+                      style={{ 
+                        backgroundColor: "rgba(239,68,68,0.08)", 
+                        borderColor: "rgba(239,68,68,0.25)",
+                        color: "var(--color-alert)",
+                        boxShadow: "0 2px 8px rgba(239,68,68,0.05)"
+                      }}
+                    >
+                      🚫 {allergy}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = allergyList.filter((a) => a !== allergy);
+                          setAllergyList(next);
+                          savePreferences(undefined, next, undefined);
+                        }}
+                        className="hover:text-white transition-colors duration-150 focus:outline-none text-[12px] font-bold leading-none cursor-pointer"
+                      >
+                        &times;
+                      </button>
+                    </span>
+                  ))
+                )}
+              </div>
+              <div className="flex gap-2 mt-2">
+                <input
+                  type="text"
+                  value={newAllergy}
+                  onChange={(e) => setNewAllergy(e.target.value)}
+                  placeholder="Lock new allergen (e.g. Peanut)"
+                  className="flex-1 min-w-0 h-8 px-3 rounded-lg text-xs outline-none transition-all duration-200"
+                  style={{
+                    background: "rgba(255,255,255,0.03)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    color: "var(--color-ink)",
+                    fontFamily: "var(--font-body)",
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = "rgba(255,87,51,0.4)";
+                    e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.06)";
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+                    e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.03)";
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      if (newAllergy.trim() && !allergyList.includes(newAllergy.trim())) {
+                        const next = [...allergyList, newAllergy.trim()];
+                        setAllergyList(next);
+                        setNewAllergy("");
+                        savePreferences(undefined, next, undefined);
+                      }
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (newAllergy.trim() && !allergyList.includes(newAllergy.trim())) {
+                      const next = [...allergyList, newAllergy.trim()];
+                      setAllergyList(next);
+                      setNewAllergy("");
+                      savePreferences(undefined, next, undefined);
+                    }
+                  }}
+                  className="px-3 h-8 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all duration-200 active:scale-95 cursor-pointer"
+                  style={{ 
+                    background: "linear-gradient(135deg, #FF5733 0%, #FF824D 100%)", 
+                    color: "#fff", 
+                    fontFamily: "var(--font-display)",
+                    boxShadow: "0 4px 12px rgba(255,87,51,0.2)"
+                  }}
+                >
+                  Lock
+                </button>
+              </div>
+            </div>
+
+            {/* Health Goals */}
+            <div className="space-y-2">
+              <label className="text-[9px] font-bold uppercase tracking-wider font-mono block" style={{ color: "var(--color-ghost)" }}>
+                Caloric Target & Health Goals
+              </label>
+              <textarea
+                value={healthGoals}
+                onChange={(e) => setHealthGoals(e.target.value)}
+                placeholder="e.g. 1800 kcal daily target, High protein, Low sodium"
+                rows={2}
+                className="w-full px-3 py-2 rounded-xl text-xs outline-none resize-none transition-all duration-200 font-mono"
+                style={{
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  color: "#FF824D",
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = "rgba(255,87,51,0.4)";
+                  e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.06)";
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+                  e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.03)";
+                  savePreferences(undefined, undefined, healthGoals);
+                }}
+              />
             </div>
           </div>
 

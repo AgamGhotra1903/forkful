@@ -26,8 +26,9 @@ import Instamart from "./pages/Instamart";
 import Dineout from "./pages/Dineout";
 import Genie from "./pages/Genie";
 import { CommandPalette } from "./components/CommandPalette";
-import { AISupportAssistant } from "./components/ui/AISupportAssistant";
+import AIAssistant from "./components/AIAssistant";
 import GlobalFooter from "./components/GlobalFooter";
+import MobileBottomNav from "./components/MobileBottomNav";
 
 
 const PageWrapper = ({ children }: { children: React.ReactNode }) => {
@@ -203,7 +204,9 @@ const App = () => {
           <Navbar />
           <AnimatedRoutes />
           {/* AI Support floating widget — appears on all authenticated pages */}
-          <AISupportAssistant pageContext="explore" />
+          <AIAssistant />
+          {/* Persistent mobile tab bar — standard food-delivery-app navigation */}
+          <MobileBottomNav />
         </>
       )}
       {/* Global footer — visible on every page */}

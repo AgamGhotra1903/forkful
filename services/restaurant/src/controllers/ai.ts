@@ -27,32 +27,53 @@ export const suggestMenuItems = TryCatch(async (req: AuthenticatedRequest, res: 
   // 2. Build filter and run vector search
   const priceFilter = maxPrice !== undefined ? { price: { $lte: Number(maxPrice) } } : {};
 
-  const candidates = await MenuItems.aggregate([
-    {
-      $vectorSearch: {
-        index: "menuitem_vector_index",
-        path: "embedding",
-        queryVector: queryVector,
-        numCandidates: 150,
-        limit: 15,
-        filter: {
-          restaurantId: new mongoose.Types.ObjectId(restaurantId),
-          isAvailable: true,
-          embeddingStatus: "done",
-          ...priceFilter
+  let candidates = [];
+  try {
+    candidates = await MenuItems.aggregate([
+      {
+        $vectorSearch: {
+          index: "menuitem_vector_index",
+          path: "embedding",
+          queryVector: queryVector,
+          numCandidates: 150,
+          limit: 15,
+          filter: {
+            restaurantId: new mongoose.Types.ObjectId(restaurantId),
+            isAvailable: true,
+            embeddingStatus: "done",
+            ...priceFilter
+          }
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          name: 1,
+          description: 1,
+          price: 1,
+          score: { $meta: "vectorSearchScore" }
         }
       }
-    },
-    {
-      $project: {
-        _id: 1,
-        name: 1,
-        description: 1,
-        price: 1,
-        score: { $meta: "vectorSearchScore" }
-      }
-    }
-  ]);
+    ]);
+  } catch (err) {
+    console.warn("[AI Search] Vector search failed, falling back to standard text matching:", err);
+    
+    // Fallback to token keyword matching
+    const tokens = query.split(/\s+/).filter(Boolean);
+    const regexQueries = tokens.map((t: string) => ({
+      $or: [
+        { name: { $regex: t, $options: "i" } },
+        { description: { $regex: t, $options: "i" } }
+      ]
+    }));
+
+    candidates = await MenuItems.find({
+      restaurantId: new mongoose.Types.ObjectId(restaurantId),
+      isAvailable: true,
+      ...(regexQueries.length > 0 ? { $or: regexQueries } : {}),
+      ...(maxPrice !== undefined ? { price: { $lte: Number(maxPrice) } } : {})
+    }).limit(15).lean();
+  }
 
   // 3. Skip LLM call if no candidates found
   if (candidates.length === 0) {

@@ -744,7 +744,7 @@ const OrderPage = () => {
           <button
             onClick={() => setChatOpen(true)}
             id="order-chat-fab"
-            className="fixed bottom-8 right-4 z-30 w-14 h-14 rounded-full flex items-center justify-center shadow-xl transition-all duration-200 active:scale-95 glow-orange"
+            className="fixed bottom-24 right-4 z-30 w-14 h-14 rounded-full flex items-center justify-center shadow-xl transition-all duration-200 active:scale-95 glow-orange"
             style={{ backgroundColor: "var(--color-route)", color: "white" }}
             aria-label="Open order chat"
           >

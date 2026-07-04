@@ -14,7 +14,7 @@ services:
     volumes:
       - mongo_data:/data/db
     healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test -u ${MONGO_USER:-admin} -p ${MONGO_PASSWORD:-admin} || exit 1
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/admin -u ${MONGO_USER:-admin} -p ${MONGO_PASSWORD:-admin} --authenticationDatabase admin --quiet || exit 1
       interval: 10s
       timeout: 5s
       retries: 5
@@ -67,9 +67,13 @@ services:
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 5001
       MONGO_URL: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-admin}@mongodb:27017/forkful?authSource=admin
+      MONGO_URI: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-admin}@mongodb:27017/forkful?authSource=admin
       JWT_SEC: ${JWT_SEC:-your-secret-key}
-      RABBIT_URL: amqp://${RABBIT_USER:-guest}:${RABBIT_PASS:-guest}@rabbitmq:5672
+      RABBITMQ_URL: amqp://${RABBIT_USER:-guest}:${RABBIT_PASS:-guest}@rabbitmq:5672
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      ADMIN_ACCESS_CODE: ${ADMIN_ACCESS_CODE:-admin123}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -94,10 +98,21 @@ services:
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 5002
       MONGO_URL: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-admin}@mongodb:27017/forkful?authSource=admin
+      MONGO_URI: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-admin}@mongodb:27017/forkful?authSource=admin
       JWT_SEC: ${JWT_SEC:-your-secret-key}
-      RABBIT_URL: amqp://${RABBIT_USER:-guest}:${RABBIT_PASS:-guest}@rabbitmq:5672
+      RABBITMQ_URL: amqp://${RABBIT_USER:-guest}:${RABBIT_PASS:-guest}@rabbitmq:5672
+      PAYMENT_QUEUE: payment_event
+      RIDER_QUEUE: rider_queue
+      ORDER_READY_QUEUE: order_ready_queue
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-dev-internal-key}
+      # Service-to-service calls must use the Docker Compose service name,
+      # not "localhost" — each service is its own container/network host.
+      UTILS_SERVICE: http://utils:5005
+      REALTIME_SERVICE: http://realtime:5006
+      RIDER_SERVICE: http://rider:5003
     depends_on:
       mongodb:
         condition: service_healthy
@@ -122,9 +137,16 @@ services:
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 5003
       MONGO_URL: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-admin}@mongodb:27017/forkful?authSource=admin
+      MONGO_URI: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-admin}@mongodb:27017/forkful?authSource=admin
       JWT_SEC: ${JWT_SEC:-your-secret-key}
-      RABBIT_URL: amqp://${RABBIT_USER:-guest}:${RABBIT_PASS:-guest}@rabbitmq:5672
+      RABBITMQ_URL: amqp://${RABBIT_USER:-guest}:${RABBIT_PASS:-guest}@rabbitmq:5672
+      RIDER_QUEUE: rider_queue
+      ORDER_READY_QUEUE: order_ready_queue
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-dev-internal-key}
+      UTILS_SERVICE: http://utils:5005
+      REALTIME_SERVICE: http://realtime:5006
+      RESTAURANT_SERVICE: http://restaurant:5002
     depends_on:
       mongodb:
         condition: service_healthy
@@ -149,6 +171,8 @@ services:
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 5004
       MONGO_URL: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-admin}@mongodb:27017/forkful?authSource=admin
+      MONGO_URI: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-admin}@mongodb:27017/forkful?authSource=admin
+      DB_NAME: Zomato_Clone
       JWT_SEC: ${JWT_SEC:-your-secret-key}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
     depends_on:
@@ -173,6 +197,19 @@ services:
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 5005
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      RABBITMQ_URL: amqp://${RABBIT_USER:-guest}:${RABBIT_PASS:-guest}@rabbitmq:5672
+      PAYMENT_QUEUE: payment_event
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-dev-internal-key}
+      RESTAURANT_SERVICE: http://restaurant:5002
+      CLOUD_NAME: ${CLOUD_NAME:-}
+      CLOUD_API_KEY: ${CLOUD_API_KEY:-}
+      CLOUD_SECRET_KEY: ${CLOUD_SECRET_KEY:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
     healthcheck:
       test: wget --quiet --tries=1 --spider http://localhost:5005/health || exit 1
       interval: 10s
@@ -194,6 +231,7 @@ services:
       JWT_SEC: ${JWT_SEC:-your-secret-key}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
       REDIS_URL: redis://redis:6379
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-dev-internal-key}
     depends_on:
       redis:
         condition: service_healthy

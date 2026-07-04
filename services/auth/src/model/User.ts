@@ -2,10 +2,18 @@ import mongoose, { Document, Schema } from "mongoose";
 
 export interface IUser extends Document {
   name: string;
+  firstName?: string;
+  lastName?: string;
+  mobileNumber?: string;
+  password?: string;
   email: string;
   image: string;
   role?: string | null;
   rewardPoints: number;
+  isVerified: boolean;
+  dietaryPreferences?: string[];
+  allergies?: string[];
+  healthGoals?: string;
 }
 
 const schema: Schema<IUser> = new Schema(
@@ -14,6 +22,18 @@ const schema: Schema<IUser> = new Schema(
       type: String,
       required: true,
       default: "Forkful User",
+    },
+    firstName: {
+      type: String,
+    },
+    lastName: {
+      type: String,
+    },
+    mobileNumber: {
+      type: String,
+    },
+    password: {
+      type: String,
     },
     email: {
       type: String,
@@ -32,6 +52,22 @@ const schema: Schema<IUser> = new Schema(
     rewardPoints: {
       type: Number,
       default: 0,
+    },
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    dietaryPreferences: {
+      type: [String],
+      default: [],
+    },
+    allergies: {
+      type: [String],
+      default: [],
+    },
+    healthGoals: {
+      type: String,
+      default: "",
     },
   },
   {
