@@ -943,7 +943,7 @@ const RestaurantPage = () => {
 
       {/* ── Sticky Floating Cart Bar ── */}
       {quantity > 0 && (
-        <div className="fixed bottom-6 left-4 right-4 z-40 max-w-md mx-auto animate-slide-up">
+        <div className="fixed bottom-20 md:bottom-6 left-4 right-4 z-40 max-w-md mx-auto animate-slide-up">
           <div
             className="p-4 rounded-2xl shadow-xl flex items-center justify-between text-white border"
             style={{

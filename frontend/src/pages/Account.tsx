@@ -7,6 +7,8 @@ const Account = () => {
   const { user, setUser, setIsAuth } = useAppData();
   const navigate = useNavigate();
 
+
+
   const logoutHandler = () => {
     localStorage.removeItem("token");
     setUser(null);
@@ -135,6 +137,8 @@ const Account = () => {
             </div>
           ))}
         </div>
+
+
 
         {/* ── Menu sections ── */}
         {MENU_SECTIONS.map((section) => (

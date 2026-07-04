@@ -297,7 +297,7 @@ const Instamart = () => {
 
       {/* Floating Checkout Bar */}
       {getCartCount() > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 border-t shadow-2xl z-40 animate-slide-up glass-panel" style={{ borderColor: "var(--color-rule)" }}>
+        <div className="fixed bottom-16 md:bottom-0 left-0 right-0 border-t shadow-2xl z-40 animate-slide-up glass-panel" style={{ borderColor: "var(--color-rule)" }}>
           <div className="mx-auto max-w-3xl flex items-center justify-between px-4 py-4 md:px-6">
             <div className="flex items-center space-x-3">
               <span className="p-2.5 rounded-xl" style={{ backgroundColor: "var(--color-route-light)", color: "var(--color-route)", borderRadius: "var(--radius-md)" }}>

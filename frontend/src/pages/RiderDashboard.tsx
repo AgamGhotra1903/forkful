@@ -380,15 +380,15 @@ const RiderDashboard = () => {
 
       {/* LAYER 1: Floating top header */}
       <div
-        className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-5 pt-safe pb-4"
+        className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between gap-2 px-3 sm:px-5 pt-safe pb-4"
         style={{
           background: "linear-gradient(to bottom, rgba(10,10,11,0.9) 0%, transparent 100%)",
         }}
       >
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <ForkfulLogo size={34} dark={darkMode} />
-            <span style={{ fontFamily: "var(--font-display, system-ui)", fontWeight: 800, letterSpacing: "-0.04em", fontSize: "1.05rem", lineHeight: 1 }}>
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <ForkfulLogo size={30} dark={darkMode} />
+            <span className="hidden sm:inline" style={{ fontFamily: "var(--font-display, system-ui)", fontWeight: 800, letterSpacing: "-0.04em", fontSize: "1.05rem", lineHeight: 1 }}>
               <span style={{ color: darkMode ? "#F0EEE9" : "#111111" }}>Fork</span>
               <span style={{
                 color: darkMode ? "#FF6B45" : "#FF5733",
@@ -396,26 +396,26 @@ const RiderDashboard = () => {
               }}>ful</span>
             </span>
           </div>
-          <div className="h-4 w-px" style={{ backgroundColor: "var(--color-rule)" }} />
-          <div>
-            <p className="text-xs text-[var(--color-manifest)]">Rider Dashboard</p>
-            <p className="text-sm font-bold text-[var(--color-ink)]">{profile?.name || user?.name || "Rider"}</p>
+          <div className="h-4 w-px flex-shrink-0 hidden sm:block" style={{ backgroundColor: "var(--color-rule)" }} />
+          <div className="min-w-0">
+            <p className="text-[10px] sm:text-xs text-[var(--color-manifest)] truncate">Rider Dashboard</p>
+            <p className="text-xs sm:text-sm font-bold text-[var(--color-ink)] truncate">{profile?.name || user?.name || "Rider"}</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
           {/* Online/Offline toggle */}
           <button
             onClick={toggleAvailability}
             disabled={toggling}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all ${
+            className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 rounded-full text-[11px] sm:text-sm font-bold transition-all whitespace-nowrap ${
               profile?.isAvailable
                 ? "bg-green-500/20 text-green-400 border border-green-500/30"
                 : "bg-red-500/20 text-red-400 border border-red-500/30"
             } ${toggling ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             <span
-              className={`w-2 h-2 rounded-full ${
+              className={`w-2 h-2 rounded-full flex-shrink-0 ${
                 profile?.isAvailable ? "bg-green-400 animate-pulse" : "bg-red-400"
               }`}
             />
@@ -425,10 +425,10 @@ const RiderDashboard = () => {
           {/* Logout button */}
           <button
             onClick={handleLogout}
-            className="glass-card w-10 h-10 rounded-xl flex items-center justify-center text-[var(--color-manifest)] hover:text-[var(--color-alert)] transition-colors"
+            className="glass-card w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-[var(--color-manifest)] hover:text-[var(--color-alert)] transition-colors"
             aria-label="Log out"
           >
-            <BiLogOut className="text-lg" />
+            <BiLogOut className="text-base sm:text-lg" />
           </button>
         </div>
       </div>

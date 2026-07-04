@@ -4,7 +4,6 @@ import type { IMenuItem, IRestaurant } from "../types";
 import axios from "axios";
 import { restaurantService } from "../main";
 import { motion } from "framer-motion";
-import ForkfulLogo from "../components/ForkfulLogo";
 import AddRestaurant from "../components/AddRestaurant";
 import RestaurantProfile from "../components/RestaurantProfile";
 import MenuItems from "../components/MenuItems";
@@ -13,18 +12,16 @@ import RestaurantOrders from "../components/RestaurantOrders";
 import RestaurantAnalytics from "../components/RestaurantAnalytics";
 import { useAppData } from "../context/AppContext";
 import { useSocket } from "../context/SocketContext";
+import DashboardShell, { type DashboardNavItem } from "../components/DashboardShell";
+import { useSidebarCollapse } from "../hooks/useSidebarCollapse";
 import {
   BiHomeAlt,
   BiReceipt,
   BiDish,
   BiBarChartAlt,
   BiCog,
-  BiSun,
-  BiMoon,
   BiLoader,
-  BiChevronRight,
   BiStar,
-  BiLogOut
 } from "react-icons/bi";
 import toast from "react-hot-toast";
 
@@ -37,6 +34,14 @@ const Restaurant = () => {
   const [restaurant, setRestaurant] = useState<IRestaurant | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<SellerSection>("overview");
+  const [sidebarCollapsed, setSidebarCollapsed] = useSidebarCollapse("forkful-seller-sidebar-collapsed");
+  const navItems: DashboardNavItem[] = [
+    { key: "overview", label: "Overview", icon: <BiHomeAlt /> },
+    { key: "orders", label: "Orders", icon: <BiReceipt /> },
+    { key: "menu", label: "Menu List", icon: <BiDish /> },
+    { key: "analytics", label: "Analytics", icon: <BiBarChartAlt /> },
+    { key: "settings", label: "Settings", icon: <BiCog /> },
+  ];
   const [menuItems, setMenuItems] = useState<IMenuItem[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [togglingStatus, setTogglingStatus] = useState(false);
@@ -273,143 +278,93 @@ const Restaurant = () => {
   const totalOrdersThisWeek = weekOrders.length;
 
   return (
-    <div className="min-h-screen flex" style={{ backgroundColor: "var(--bg-base)" }}>
-
-      {/* ── Sidebar Layout (240px) ── */}
-      <aside
-        className="w-60 fixed top-0 bottom-0 left-0 z-40 p-5 flex flex-col justify-between glass-panel"
-        style={{ borderRight: "1px solid var(--color-rule)" }}
-      >
-        <div className="space-y-6">
-          {/* Logo */}
-          <div className="flex items-center gap-2 select-none px-1">
-            <ForkfulLogo size={34} dark={darkMode} />
-            <span style={{ fontFamily: "var(--font-display, system-ui)", fontWeight: 800, letterSpacing: "-0.04em", fontSize: "1.05rem", lineHeight: 1 }}>
-              <span style={{ color: darkMode ? "#F0EEE9" : "#111111" }}>Fork</span>
-              <span style={{
-                color: darkMode ? "#FF6B45" : "#FF5733",
-                textShadow: darkMode ? "0 0 20px rgba(255, 107, 69, 0.4)" : "none"
-              }}>ful</span>
-            </span>
+    <DashboardShell
+      items={navItems}
+      activeKey={activeSection}
+      onSelect={(key) => setActiveSection(key as SellerSection)}
+      darkMode={darkMode}
+      onToggleDarkMode={toggleDarkMode}
+      onLogout={() => {
+        localStorage.removeItem("token");
+        setUser(null);
+        setIsAuth(false);
+        toast.success("Signed out");
+        navigate("/login");
+      }}
+      collapsed={sidebarCollapsed}
+      onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
+      layoutId="activeSellerTabIndicator"
+      accentColor="#FF5733"
+      accentBg="rgba(255,87,51,0.08)"
+      profileCompact={
+        <img
+          src={restaurant.image || "https://images.unsplash.com/photo-1552566626-52f8b828add9?auto=format&fit=crop&w=300&q=80"}
+          alt="Restaurant avatar"
+          className="w-10 h-10 mx-auto rounded-full object-cover flex-shrink-0 border"
+          style={{ borderColor: "var(--color-rule)" }}
+          title={restaurant.name}
+        />
+      }
+      profile={
+        <div className="flex items-center gap-3 p-2 rounded-2xl border" style={{ borderColor: "var(--color-rule)", backgroundColor: "rgba(255,255,255,0.02)" }}>
+          <img
+            src={restaurant.image || "https://images.unsplash.com/photo-1552566626-52f8b828add9?auto=format&fit=crop&w=300&q=80"}
+            alt="Restaurant avatar"
+            className="w-10 h-10 rounded-full object-cover flex-shrink-0 border"
+            style={{ borderColor: "var(--color-rule)" }}
+          />
+          <div className="min-w-0 flex-1">
+            <h2 className="text-xs font-bold truncate leading-snug" style={{ color: "var(--color-ink)" }}>{restaurant.name}</h2>
+            <span className="text-[9px] font-body tracking-wider uppercase font-bold" style={{ color: "var(--color-ghost)" }}>Seller</span>
           </div>
+        </div>
+      }
+      footerExtra={
+        <div className="flex items-center justify-between px-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1" style={{ color: "var(--color-manifest)" }}>
+            {restaurant.isOpen && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+            {restaurant.isOpen ? "Kitchen Open" : "Kitchen Closed"}
+          </span>
 
-          {/* Restaurant Profile */}
-          <div className="flex items-center gap-3 p-2 rounded-2xl border" style={{ borderColor: "var(--color-rule)", backgroundColor: "rgba(255,255,255,0.02)" }}>
-            <img
-              src={restaurant.image || "https://images.unsplash.com/photo-1552566626-52f8b828add9?auto=format&fit=crop&w=300&q=80"}
-              alt="Restaurant avatar"
-              className="w-10 h-10 rounded-full object-cover flex-shrink-0 border"
-              style={{ borderColor: "var(--color-rule)" }}
+          <button
+            onClick={handleToggleStatus}
+            disabled={togglingStatus}
+            className="relative w-10 h-5 rounded-full transition-colors cursor-pointer"
+            style={{ backgroundColor: restaurant.isOpen ? "var(--color-signal)" : "var(--color-rule)" }}
+          >
+            <div
+              className="absolute w-4 h-4 bg-white rounded-full top-0.5 left-0.5 transition-transform"
+              style={{ transform: restaurant.isOpen ? "translateX(20px)" : "none" }}
             />
-            <div className="min-w-0 flex-1">
-              <h2 className="text-xs font-bold truncate leading-snug" style={{ color: "var(--color-ink)" }}>{restaurant.name}</h2>
-              <span className="text-[9px] font-body tracking-wider uppercase font-bold" style={{ color: "var(--color-ghost)" }}>Seller</span>
-            </div>
-          </div>
-
-          {/* Navigation Links */}
-          <nav className="space-y-1.5 relative" aria-label="Seller dashboard navigation">
-            {[
-              { key: "overview",  label: "Overview",  icon: <BiHomeAlt /> },
-              { key: "orders",    label: "Orders",    icon: <BiReceipt /> },
-              { key: "menu",      label: "Menu List", icon: <BiDish /> },
-              { key: "analytics", label: "Analytics", icon: <BiBarChartAlt /> },
-              { key: "settings",  label: "Settings",  icon: <BiCog /> },
-            ].map((link) => {
-              const isActive = activeSection === link.key;
-              return (
-                <button
-                  key={link.key}
-                  onClick={() => setActiveSection(link.key as SellerSection)}
-                  className="w-full relative flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-colors active:scale-[0.98] cursor-pointer"
-                  style={{
-                    color: isActive ? "#FF5733" : "var(--color-manifest)",
-                    fontFamily: "var(--font-body)",
-                    background: "transparent",
-                  }}
-                >
-                  {isActive && (
-                    <motion.div
-                      layoutId="activeSellerTabIndicator"
-                      className="absolute inset-0 bg-[rgba(255,87,51,0.08)] border-l-2 border-[#FF5733] rounded-xl z-0 pointer-events-none"
-                      transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                    />
-                  )}
-                  <div className="flex items-center gap-2 relative z-10">
-                    <span className="text-base">{link.icon}</span>
-                    <span>{link.label}</span>
-                  </div>
-                  {isActive && <BiChevronRight className="text-sm relative z-10" />}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-
-        {/* Sidebar Footer Controls */}
-        <div className="space-y-4 pt-4 border-t" style={{ borderColor: "var(--color-rule)" }}>
-          {/* Status Toggle Switch */}
-          <div className="flex items-center justify-between px-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1" style={{ color: "var(--color-manifest)" }}>
-              {restaurant.isOpen && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
-              {restaurant.isOpen ? "Kitchen Open" : "Kitchen Closed"}
-            </span>
-
-            <button
-              onClick={handleToggleStatus}
-              disabled={togglingStatus}
-              className="relative w-10 h-5 rounded-full transition-colors cursor-pointer"
-              style={{ backgroundColor: restaurant.isOpen ? "var(--color-signal)" : "var(--color-rule)" }}
-            >
-              <div
-                className="absolute w-4 h-4 bg-white rounded-full top-0.5 left-0.5 transition-transform"
-                style={{ transform: restaurant.isOpen ? "translateX(20px)" : "none" }}
-              />
-            </button>
-          </div>
-
-          {/* Theme Toggle Button */}
-          <button
-            onClick={toggleDarkMode}
-            className="w-full h-10 border rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition duration-200 active:scale-[0.98] cursor-pointer"
-            style={{ borderColor: "var(--color-rule)", color: "var(--color-ink)", backgroundColor: "rgba(255,255,255,0.01)" }}
-          >
-            {darkMode ? (
-              <>
-                <BiSun className="text-base text-amber-500" />
-                <span>Light Mode</span>
-              </>
-            ) : (
-              <>
-                <BiMoon className="text-base" style={{ color: "var(--color-route)" }} />
-                <span>Dark Mode</span>
-              </>
-            )}
-          </button>
-
-          {/* Sign Out */}
-          <button
-            onClick={() => {
-              localStorage.removeItem("token");
-              setUser(null);
-              setIsAuth(false);
-              toast.success("Signed out");
-              navigate("/login");
-            }}
-            className="w-full h-10 border rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition duration-200 active:scale-[0.98] cursor-pointer"
-            style={{ borderColor: "rgba(239,68,68,0.4)", color: "#f87171", backgroundColor: "rgba(239,68,68,0.06)" }}
-          >
-            <BiLogOut className="text-base" />
-            <span>Sign Out</span>
           </button>
         </div>
-      </aside>
+      }
+    >
+      {/* Mobile-only kitchen status pill (footerExtra is desktop-sidebar-only) */}
+      <div className="md:hidden -mt-1 mb-1">
+        <button
+          onClick={handleToggleStatus}
+          disabled={togglingStatus}
+          className="w-full flex items-center justify-between px-4 py-2.5 rounded-2xl glass-card border"
+          style={{ borderColor: "var(--color-rule)" }}
+        >
+          <span className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5" style={{ color: "var(--color-manifest)" }}>
+            {restaurant.isOpen && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+            {restaurant.isOpen ? "Kitchen Open" : "Kitchen Closed"}
+          </span>
+          <div
+            className="relative w-10 h-5 rounded-full transition-colors"
+            style={{ backgroundColor: restaurant.isOpen ? "var(--color-signal)" : "var(--color-rule)" }}
+          >
+            <div
+              className="absolute w-4 h-4 bg-white rounded-full top-0.5 left-0.5 transition-transform"
+              style={{ transform: restaurant.isOpen ? "translateX(20px)" : "none" }}
+            />
+          </div>
+        </button>
+      </div>
 
-      {/* ── Main Content Area ── */}
-      <main className="flex-1 pl-64 pr-5 py-8 min-h-screen">
-        <div className="max-w-5xl mx-auto space-y-6">
-
-          {/* SECTION: Overview */}
+      {/* SECTION: Overview */}
           {activeSection === "overview" && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
@@ -801,10 +756,7 @@ const Restaurant = () => {
               <RestaurantProfile restaurant={restaurant} onUpdate={setRestaurant} isSeller={true} />
             </div>
           )}
-
-        </div>
-      </main>
-    </div>
+    </DashboardShell>
   );
 };
 

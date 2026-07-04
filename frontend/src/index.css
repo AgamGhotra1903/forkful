@@ -615,6 +615,13 @@ button:active { transform: scale(0.97); }
 .leaflet-marker-pane .leaflet-popup { font-family: var(--font-body); font-size: 0.875rem; }
 .leaflet-popup-content { margin: 0; padding: 4px; }
 
+/* Tint every Leaflet basemap toward the app's "Midnight Ember" cool-blue
+   night tone instead of plain CartoDB gray, so the map reads as part of
+   the dark UI rather than a generic embedded widget. */
+.leaflet-tile-pane {
+  filter: hue-rotate(180deg) saturate(160%) brightness(0.9) contrast(1.05);
+}
+
 /* ─────────────────────────────────────────────────────────────────────────────
    MISC TAILWIND UTILITIES (layer)
 ───────────────────────────────────────────────────────────────────────────── */

@@ -177,6 +177,24 @@ const Navbar = () => {
             {/* ── Right nav ── */}
             <div className="flex items-center gap-1 ml-auto">
 
+              {/* AI Assistant — opens the merged widget in expanded mode */}
+              {isAuth && (
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new CustomEvent("forkful:open-ai", { detail: { expanded: true } }))}
+                  className="flex items-center gap-1.5 px-3 h-9 rounded-xl text-xs font-semibold transition-all duration-150 relative overflow-visible"
+                  style={{ color: "var(--color-manifest)", backgroundColor: "transparent", fontFamily: "var(--font-body)" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.06)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                  aria-label="Open AI shopping assistant"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 2l1.8 5.6L19 9l-5.2 1.4L12 16l-1.8-5.6L5 9l5.2-1.4L12 2z" />
+                  </svg>
+                  <span className="hidden sm:inline">AI Assistant</span>
+                </button>
+              )}
+
               {/* Orders */}
               {isAuth && (
                 <Link

@@ -2,11 +2,12 @@ import axios from "axios";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { adminService, authService } from "../main";
-import ForkfulLogo from "../components/ForkfulLogo";
 import RiderAdmin from "../components/RiderAdmin";
 import { useAppData } from "../context/AppContext";
 import { StatusPill } from "../components/ui";
 import { motion } from "framer-motion";
+import DashboardShell, { type DashboardNavItem } from "../components/DashboardShell";
+import { useSidebarCollapse } from "../hooks/useSidebarCollapse";
 import {
   BiHomeAlt,
   BiStoreAlt,
@@ -15,10 +16,7 @@ import {
   BiReceipt,
   BiBarChartAlt,
   BiCog,
-  BiSun,
-  BiMoon,
   BiLoader,
-  BiChevronRight,
   BiCheckCircle,
   BiNavigation
 } from "react-icons/bi";
@@ -54,6 +52,17 @@ const Admin = () => {
   const [riders, setRiders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<AdminSection>("overview");
+  const [sidebarCollapsed, setSidebarCollapsed] = useSidebarCollapse("forkful-admin-sidebar-collapsed");
+
+  const navItems: DashboardNavItem[] = [
+    { key: "overview", label: "Overview", icon: <BiHomeAlt /> },
+    { key: "restaurants", label: "Restaurants", icon: <BiStoreAlt /> },
+    { key: "users", label: "Users List", icon: <BiUser /> },
+    { key: "riders", label: "Riders Info", icon: <BiCycling /> },
+    { key: "orders", label: "Orders log", icon: <BiReceipt /> },
+    { key: "reports", label: "Reports", icon: <BiBarChartAlt /> },
+    { key: "settings", label: "Settings", icon: <BiCog /> },
+  ];
 
   // Real Database state
   const [usersList, setUsersList] = useState<any[]>([]);
@@ -162,120 +171,42 @@ const Admin = () => {
   const activePendingRest = restaurants.length > 0 ? restaurants : MOCK_PENDING_RESTAURANTS;
 
   return (
-    <div className="min-h-screen flex" style={{ backgroundColor: "var(--bg-base)" }}>
-
-      {/* ── Sidebar Layout (240px) ── */}
-      <aside
-        className="w-60 fixed top-0 bottom-0 left-0 z-40 p-5 flex flex-col justify-between glass-panel"
-        style={{ borderRight: "1px solid var(--color-rule)" }}
-      >
-        <div className="space-y-6">
-          {/* Logo */}
-          <div className="flex items-center gap-2 select-none px-1">
-            <ForkfulLogo size={34} dark={darkMode} />
-            <span style={{ fontFamily: "var(--font-display, system-ui)", fontWeight: 800, letterSpacing: "-0.04em", fontSize: "1.05rem", lineHeight: 1 }}>
-              <span style={{ color: darkMode ? "#F0EEE9" : "#111111" }}>Fork</span>
-              <span style={{
-                color: darkMode ? "#FF6B45" : "#FF5733",
-                textShadow: darkMode ? "0 0 20px rgba(255, 107, 69, 0.4)" : "none"
-              }}>ful</span>
+    <DashboardShell
+      items={navItems}
+      activeKey={activeSection}
+      onSelect={(key) => setActiveSection(key as AdminSection)}
+      darkMode={darkMode}
+      onToggleDarkMode={toggleDarkMode}
+      onLogout={handleLogout}
+      collapsed={sidebarCollapsed}
+      onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
+      layoutId="activeAdminTabIndicator"
+      accentColor="var(--color-route)"
+      accentBg="var(--color-route-light)"
+      profileCompact={
+        <div
+          className="w-10 h-10 mx-auto rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+          style={{ background: "linear-gradient(135deg, var(--color-route) 0%, var(--color-thermal) 100%)" }}
+          title={user?.name || "Admin Console"}
+        >
+          AD
+        </div>
+      }
+      profile={
+        <div className="flex items-center gap-3 p-2.5 rounded-2xl border" style={{ borderColor: "var(--color-rule)", backgroundColor: "rgba(255,255,255,0.02)" }}>
+          <div className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, var(--color-route) 0%, var(--color-thermal) 100%)" }}>
+            AD
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-xs font-bold truncate leading-none" style={{ color: "var(--color-ink)" }}>{user?.name || "Admin Console"}</h2>
+            <span className="inline-flex mt-1 text-[8px] font-mono tracking-wider uppercase font-bold text-white bg-slate-900 px-1.5 py-0.5 rounded-md">
+              Admin
             </span>
           </div>
-
-          {/* Admin profile */}
-          <div className="flex items-center gap-3 p-2.5 rounded-2xl border" style={{ borderColor: "var(--color-rule)", backgroundColor: "rgba(255,255,255,0.02)" }}>
-            <div className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, var(--color-route) 0%, var(--color-thermal) 100%)" }}>
-              AD
-            </div>
-            <div className="min-w-0 flex-1">
-              <h2 className="text-xs font-bold truncate leading-none" style={{ color: "var(--color-ink)" }}>{user?.name || "Admin Console"}</h2>
-              <span className="inline-flex mt-1 text-[8px] font-mono tracking-wider uppercase font-bold text-white bg-slate-900 px-1.5 py-0.5 rounded-md">
-                Admin
-              </span>
-            </div>
-          </div>
-
-          {/* Navigation Links */}
-          <nav className="space-y-1.5 relative" aria-label="Admin console navigation">
-            {[
-              { key: "overview",    label: "Overview",    icon: <BiHomeAlt /> },
-              { key: "restaurants", label: "Restaurants", icon: <BiStoreAlt /> },
-              { key: "users",       label: "Users List",  icon: <BiUser /> },
-              { key: "riders",      label: "Riders Info", icon: <BiCycling /> },
-              { key: "orders",      label: "Orders log",  icon: <BiReceipt /> },
-              { key: "reports",     label: "Reports",     icon: <BiBarChartAlt /> },
-              { key: "settings",    label: "Settings",    icon: <BiCog /> },
-            ].map((link) => {
-              const isActive = activeSection === link.key;
-              return (
-                <button
-                  key={link.key}
-                  onClick={() => setActiveSection(link.key as AdminSection)}
-                  className="w-full relative flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-colors active:scale-[0.98] cursor-pointer"
-                  style={{
-                    color: isActive ? "var(--color-route)" : "var(--color-manifest)",
-                    fontFamily: "var(--font-body)",
-                    background: "transparent",
-                  }}
-                >
-                  {isActive && (
-                    <motion.div
-                      layoutId="activeAdminTabIndicator"
-                      className="absolute inset-0 bg-[var(--color-route-light)] border-l-2 border-[var(--color-route)] rounded-xl z-0 pointer-events-none"
-                      transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                    />
-                  )}
-                  <div className="flex items-center gap-2 relative z-10">
-                    <span className="text-base">{link.icon}</span>
-                    <span>{link.label}</span>
-                  </div>
-                  {isActive && <BiChevronRight className="text-sm relative z-10" />}
-                </button>
-              );
-            })}
-          </nav>
         </div>
-
-        {/* Sidebar Footer Theme toggle */}
-        <div className="space-y-4 pt-4 border-t" style={{ borderColor: "var(--color-rule)" }}>
-          <button
-            onClick={toggleDarkMode}
-            className="w-full h-10 border rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition duration-200 active:scale-[0.98] cursor-pointer"
-            style={{ borderColor: "var(--color-rule)", color: "var(--color-ink)", backgroundColor: "rgba(255,255,255,0.01)" }}
-          >
-            {darkMode ? (
-              <>
-                <BiSun className="text-base text-amber-500" />
-                <span>Light Mode</span>
-              </>
-            ) : (
-              <>
-                <BiMoon className="text-base" style={{ color: "var(--color-route)" }} />
-                <span>Dark Mode</span>
-              </>
-            )}
-          </button>
-          
-          <button
-            onClick={handleLogout}
-            className="w-full h-10 border rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition duration-200 active:scale-[0.98] cursor-pointer"
-            style={{ borderColor: "rgba(239,68,68,0.4)", color: "#f87171", backgroundColor: "rgba(239,68,68,0.06)" }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
-            <span>Sign Out</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* ── Main Content Area ── */}
-      <main className="flex-1 pl-64 pr-5 py-8 min-h-screen">
-        <div className="max-w-5xl mx-auto space-y-6">
-
-          {/* SECTION: Overview */}
+      }
+    >
+      {/* SECTION: Overview */}
           {activeSection === "overview" && (
             <div className="space-y-6">
               {/* Platform Hero Banner */}
@@ -295,7 +226,7 @@ const Admin = () => {
                   <span className="text-[10px] font-mono tracking-widest uppercase font-bold text-[var(--color-route)]">
                     Control Console
                   </span>
-                  <h1 className="text-3xl font-black font-display tracking-tight leading-none text-white">
+                  <h1 className="text-2xl md:text-3xl font-black font-display tracking-tight leading-none text-white">
                     Good morning, {user?.name || "Platform Admin"}
                   </h1>
                   <p className="text-xs text-slate-300 font-medium font-mono">
@@ -418,8 +349,8 @@ const Admin = () => {
               </div>
 
               {/* Approval Table Queue */}
-              <div className="overflow-hidden glass-card rounded-2xl">
-                <table className="w-full text-left border-collapse">
+              <div className="overflow-x-auto glass-card rounded-2xl">
+                <table className="w-full min-w-[640px] text-left border-collapse">
                   <thead>
                     <tr className="border-b text-[10px] font-mono tracking-widest uppercase font-bold text-slate-400" style={{ borderColor: "var(--color-rule)" }}>
                       <th className="p-4">Photo</th>
@@ -481,8 +412,8 @@ const Admin = () => {
               </div>
 
               {/* User management table */}
-              <div className="overflow-hidden glass-card rounded-2xl">
-                <table className="w-full text-left border-collapse">
+              <div className="overflow-x-auto glass-card rounded-2xl">
+                <table className="w-full min-w-[640px] text-left border-collapse">
                   <thead>
                     <tr className="border-b text-[10px] font-mono tracking-widest uppercase font-bold text-slate-400" style={{ borderColor: "var(--color-rule)" }}>
                       <th className="p-4">User</th>
@@ -590,8 +521,8 @@ const Admin = () => {
                   Live tracking orders currently processed by the platform.
                 </p>
               </div>
-              <div className="overflow-hidden glass-card rounded-2xl mt-4">
-                <table className="w-full text-left border-collapse">
+              <div className="overflow-x-auto glass-card rounded-2xl mt-4">
+                <table className="w-full min-w-[640px] text-left border-collapse">
                   <thead>
                     <tr className="border-b text-[10px] font-mono tracking-widest uppercase font-bold text-slate-400" style={{ borderColor: "var(--color-rule)" }}>
                       <th className="p-4">Order ID</th>
@@ -651,7 +582,7 @@ const Admin = () => {
               </div>
               <div className="p-6 rounded-2xl glass-card space-y-4">
                 <h3 className="text-sm font-bold font-display" style={{ color: "var(--color-ink)" }}>Platform Fees Settings</h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-xs font-semibold block text-slate-400">PLATFORM FEE (₹)</label>
                     <input type="number" defaultValue="7" className="w-full text-xs px-4 py-3 rounded-xl outline-none glass-input" />
@@ -667,10 +598,7 @@ const Admin = () => {
               </div>
             </div>
           )}
-
-        </div>
-      </main>
-    </div>
+    </DashboardShell>
   );
 };
 
