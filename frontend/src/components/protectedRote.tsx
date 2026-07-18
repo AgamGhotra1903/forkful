@@ -8,7 +8,7 @@ const ProtectedRoute = () => {
   if (loading) return null;
 
   if (!isAuth) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/landing" replace />;
   }
 
   // If user is authenticated but doesn't have a role, restrict to /select-role

@@ -198,7 +198,7 @@ const AddAddressPage = () => {
           style={{ borderColor: "var(--color-rule)" }}
         >
           <MapContainer
-            center={[latitude || 28.6139, longitude || 77.209]}
+            center={[latitude || 25.4299625, longitude || 81.7721885]}
             zoom={13}
             className="h-full w-full"
             style={{ height: "100%", width: "100%", zIndex: 1 }}

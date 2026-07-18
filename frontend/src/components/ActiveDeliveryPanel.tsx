@@ -24,7 +24,8 @@ const ActiveDeliveryPanel: React.FC<ActiveDeliveryPanelProps> = ({ order, onStat
 
   // distance is already in km
   const distance = (order.distance || 3).toFixed(1);
-  const eta = Math.max(1, Math.ceil(((order.distance || 3) / 20) * 60));
+  const travelTime = Math.ceil(((order.distance || 3) / 20) * 60);
+  const eta = order.status === 'rider_assigned' ? travelTime + 5 : travelTime;
 
   const getNextStatus = () => {
     switch (order.status) {
@@ -67,13 +68,13 @@ const ActiveDeliveryPanel: React.FC<ActiveDeliveryPanelProps> = ({ order, onStat
         }}
         className={`fixed z-40 transition-all duration-300 ${
           isCollapsed
-            ? "top-4 left-1/2 -translate-x-1/2 w-[140px] h-[40px] flex items-center justify-center cursor-pointer border border-white/10"
+            ? "bottom-6 left-1/2 -translate-x-1/2 w-[150px] h-[46px] flex items-center justify-center cursor-pointer border border-white/10"
             : "left-0 right-0 bottom-0 border-t rounded-t-[2.5rem]"
         }`}
         style={{
-          borderRadius: isCollapsed ? "20px" : "2.5rem 2.5rem 0px 0px",
-          height: isCollapsed ? "40px" : (expanded ? "72vh" : "268px"),
-          width: isCollapsed ? "140px" : "100%",
+          borderRadius: isCollapsed ? "23px" : "2.5rem 2.5rem 0px 0px",
+          height: isCollapsed ? "46px" : (expanded ? "72vh" : "268px"),
+          width: isCollapsed ? "150px" : "100%",
           background: isCollapsed ? "linear-gradient(135deg, rgba(15,23,42,0.97) 0%, rgba(11,15,25,0.99) 100%)" : "rgba(10, 10, 11, 0.94)",
           backdropFilter: "blur(24px)",
           WebkitBackdropFilter: "blur(24px)",
@@ -81,12 +82,12 @@ const ActiveDeliveryPanel: React.FC<ActiveDeliveryPanelProps> = ({ order, onStat
           boxShadow: isCollapsed
             ? "inset 0 1px 0 rgba(255,255,255,0.12), 0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06)"
             : "inset 0 1px 0 rgba(255,255,255,0.06), 0 -12px 40px rgba(0,0,0,0.5)",
-          // Center alignment for collapsed capsule
+          // Align at bottom of screen when collapsed to avoid clashing with the header
           ...(isCollapsed ? {
             left: "50%",
             transform: "translateX(-50%)",
-            bottom: "auto",
-            top: "16px"
+            bottom: "24px",
+            top: "auto"
           } : {
             left: 0,
             right: 0,
@@ -98,9 +99,13 @@ const ActiveDeliveryPanel: React.FC<ActiveDeliveryPanelProps> = ({ order, onStat
         transition={shouldReduceMotion ? { duration: 0 } : { type: "spring", stiffness: 300, damping: 30 }}
       >
         {isCollapsed ? (
-          <div className="flex items-center gap-2 text-white font-black text-xs select-none font-display uppercase tracking-widest animate-fade-in">
-            <span>🛵</span>
-            <span>{eta} min</span>
+          <div className="flex items-center gap-2.5 text-white font-bold text-xs select-none uppercase tracking-wider animate-fade-in">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+            </span>
+            <span className="text-base leading-none">🛵</span>
+            <span className="font-mono text-[11px] font-black">{eta} min</span>
           </div>
         ) : (
           <div className="h-full w-full relative flex flex-col pt-3 overflow-hidden">

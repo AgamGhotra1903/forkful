@@ -9,6 +9,7 @@ import { BiBookOpen, BiImage, BiStar, BiChevronRight, BiLike, BiSolidBolt, BiLoa
 import { useAppData } from "../context/AppContext";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { getDeliveryEstimate, getFallbackEstimate } from "../utils/deliveryEstimate";
 
 const getRealRating = (res: IRestaurant) => {
   if (res.ratingCount && res.ratingCount > 0) {
@@ -18,7 +19,7 @@ const getRealRating = (res: IRestaurant) => {
   const n = id.charCodeAt(id.length - 1) + id.charCodeAt(id.length - 2);
   return ((n % 10) / 10 + 4.0).toFixed(1);
 };
-const getMockDuration = (id: string) => (id.charCodeAt(id.length - 1) % 20) + 20;
+
 const getMockCost = (id: string) => {
   const n = id.charCodeAt(id.length - 2) ?? 6;
   return (Math.floor(n / 3) + 2) * 100;
@@ -53,7 +54,7 @@ const isVegItem = (name: string) => {
 const RestaurantPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { subTotal, quantity, fetchCart } = useAppData();
+  const { subTotal, quantity, fetchCart, location } = useAppData();
   const shouldReduceMotion = useReducedMotion();
   const [restaurant, setRestaurant] = useState<IRestaurant | null>(null);
   const [menuItems, setMenuItems] = useState<IMenuItem[]>([]);
@@ -244,7 +245,12 @@ const RestaurantPage = () => {
   const bestsellers = menuItems.slice(0, 3);
 
   const rating = restaurant ? getRealRating(restaurant) : "4.0";
-  const duration = restaurant ? getMockDuration(restaurant._id) : 25;
+  const restaurantCoords = restaurant?.autoLocation?.coordinates
+    ? { latitude: restaurant.autoLocation.coordinates[1], longitude: restaurant.autoLocation.coordinates[0] }
+    : null;
+  const deliveryTime = (restaurantCoords && location)
+    ? getDeliveryEstimate(restaurantCoords, location)
+    : restaurant ? getFallbackEstimate(restaurant._id) : "30–45 min";
   const cost = restaurant ? getMockCost(restaurant._id) : 200;
   const reviews = restaurant ? getRealReviewsCount(restaurant) : 0;
 
@@ -340,8 +346,18 @@ const RestaurantPage = () => {
 
         {/* Restaurant name overlay */}
         <div className="absolute bottom-0 left-0 right-0 px-5 pb-5">
-          <h1 className="text-3xl font-bold text-white tracking-tight mb-1" style={{ textShadow: "0 2px 8px rgba(0,0,0,0.4)" }}>
-            {restaurant.name}
+          <h1 className="text-3xl font-bold text-white tracking-tight mb-1 flex items-center gap-2" style={{ textShadow: "0 2px 8px rgba(0,0,0,0.4)" }}>
+            <span>{restaurant.name}</span>
+            {restaurant.isVerified && (
+              <span
+                title="Aadhaar Verified Restaurant"
+                style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, borderRadius: "50%", background: "#1d9bf0", boxShadow: "0 0 0 2.5px rgba(255,255,255,0.75)" }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-label="Verified">
+                  <path d="M5 13l4 4L19 7" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </span>
+            )}
           </h1>
           <p className="text-white/80 text-sm">
             {restaurant.description || "Multi-cuisine · Fresh & fast"}
@@ -369,8 +385,8 @@ const RestaurantPage = () => {
 
             {/* Delivery time */}
             <div className="flex-1 text-center py-3 rounded-xl" style={{ backgroundColor: "var(--color-muted)" }}>
-              <p className="text-lg font-bold mb-0.5" style={{ color: "var(--color-route)" }}>{duration}–{duration + 5}</p>
-              <p className="text-[10px] font-mono" style={{ color: "var(--color-route)" }}>minutes</p>
+              <p className="text-lg font-bold mb-0.5" style={{ color: "var(--color-route)" }}>{deliveryTime}</p>
+              <p className="text-[10px] font-mono" style={{ color: "var(--color-route)" }}>est. delivery</p>
             </div>
 
             {/* Cost */}

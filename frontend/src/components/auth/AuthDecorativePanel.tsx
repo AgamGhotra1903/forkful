@@ -37,6 +37,18 @@ export const AuthDecorativePanel = () => {
     rotate: [0, -240, -480],
   };
 
+  const eggAnimate = shouldReduceMotion ? {} : {
+    y: [0, -100, 0],
+    x: [0, 5, 0],
+    rotate: [0, 15, 0],
+  };
+
+  const pepperAnimate = shouldReduceMotion ? {} : {
+    y: [0, -65, 0],
+    x: [0, -22, 0],
+    rotate: [0, 260, 480],
+  };
+
   const leafAnimate = shouldReduceMotion ? {} : {
     y: [0, -95, 0],
     x: [0, 15, 0],
@@ -55,8 +67,16 @@ export const AuthDecorativePanel = () => {
 
   return (
     <div
-      className="hidden lg:flex lg:w-[52%] flex-col justify-between p-12 relative overflow-hidden"
       style={{
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+        padding: "48px",
+        position: "relative",
+        overflow: "hidden",
+        width: "100%",
+        minHeight: "100vh",
+        boxSizing: "border-box",
         background: "linear-gradient(135deg, #FF5733 0%, #FF824D 30%, #FF3D6A 65%, #C0392B 100%)",
       }}
     >
@@ -246,6 +266,30 @@ export const AuthDecorativePanel = () => {
             >
               <path d="M 180 145 C 180 138, 190 135, 190 145 C 190 152, 180 152, 180 145 Z" fill="#2ED573" />
               <path d="M 180 145 Q 185 142 190 145" stroke="#26AF58" strokeWidth="1" />
+            </motion.g>
+
+            {/* Fried Egg */}
+            <motion.g
+              animate={eggAnimate}
+              transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+              style={{ transformOrigin: "155px 158px" }}
+            >
+              {/* Egg white */}
+              <ellipse cx="155" cy="160" rx="15" ry="10" fill="rgba(255,255,255,0.93)" />
+              <ellipse cx="153" cy="162" rx="11" ry="7" fill="rgba(255,255,255,0.6)" />
+              {/* Yolk */}
+              <circle cx="155" cy="159" r="6" fill="#FFD700" />
+              <circle cx="153" cy="157" r="2.5" fill="rgba(255,255,255,0.5)" />
+            </motion.g>
+
+            {/* Bell Pepper Ring */}
+            <motion.g
+              animate={pepperAnimate}
+              transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut", delay: 0.15 }}
+              style={{ transformOrigin: "112px 168px" }}
+            >
+              <ellipse cx="112" cy="168" rx="11" ry="8" fill="none" stroke="#FF6348" strokeWidth="3.5" strokeLinecap="round" />
+              <ellipse cx="112" cy="168" rx="7" ry="4" fill="rgba(255,99,72,0.18)" />
             </motion.g>
 
             {/* Utensils */}

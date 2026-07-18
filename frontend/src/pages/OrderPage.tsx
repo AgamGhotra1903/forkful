@@ -38,13 +38,38 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
   delivered: <BiCheckDouble className="text-base" />,
 };
 
-function getETAMinutes(status: string): number {
-  const base: Record<string, number> = {
-    placed: 45, accepted: 40, preparing: 30,
-    ready_for_rider: 20, rider_assigned: 18,
-    picked_up: 12, delivered: 0, cancelled: 0,
-  };
-  return base[status] ?? 30;
+function getDynamicETAMinutes(status: string, distance?: number): number {
+  const dist = distance || 3; // fallback to 3km if missing
+  const travelTime = dist * 3; // 20 km/h speed -> dist / 20 * 60 = dist * 3
+  
+  let baseMinutes = 0;
+  switch (status) {
+    case "placed":
+      baseMinutes = 15 + travelTime + 5; // prep + travel + buffer
+      break;
+    case "accepted":
+      baseMinutes = 12 + travelTime + 5; // partial prep + travel + buffer
+      break;
+    case "preparing":
+      baseMinutes = 10 + travelTime + 5; // remaining prep + travel + buffer
+      break;
+    case "ready_for_rider":
+      baseMinutes = travelTime + 8; // travel + rider assign/pickup buffer
+      break;
+    case "rider_assigned":
+      baseMinutes = travelTime + 6; // travel + pickup transition buffer
+      break;
+    case "picked_up":
+      baseMinutes = travelTime + 2; // travel + delivery handover buffer
+      break;
+    case "delivered":
+    case "cancelled":
+      return 0;
+    default:
+      baseMinutes = 30;
+  }
+  
+  return Math.max(5, Math.ceil(baseMinutes));
 }
 
 
@@ -182,7 +207,7 @@ const OrderPage = () => {
       endTimeRef.current = null;
       return;
     }
-    const etaMs = getETAMinutes(order.status) * 60_000;
+    const etaMs = getDynamicETAMinutes(order.status, order.distance) * 60_000;
     endTimeRef.current = Date.now() + etaMs;
     setSecondsLeft(Math.max(0, Math.round(etaMs / 1000)));
 
@@ -245,32 +270,37 @@ const OrderPage = () => {
   }, [socket, id]);
 
 
-  // Use restaurantLocation embedded in the order document (already populated at order creation).
-  // Fallback: fetch the restaurant only if the order somehow lacks coordinates.
+  // Always fetch live restaurant coordinates from the API.
+  // The embedded order.restaurantLocation was written at order-creation time and
+  // may be stale if the seller later updates their location.
   useEffect(() => {
-    if (!order) return;
-
-    // Prefer the coordinates already on the order (most reliable, no extra request)
-    if (order.restaurantLocation?.latitude && order.restaurantLocation?.longitude) {
-      setRestaurantCoordinates([order.restaurantLocation.latitude, order.restaurantLocation.longitude]);
-      return;
-    }
-
-    // Fallback: fetch restaurant directly (fetchSingleRestaurant returns the doc at top level)
-    if (!order.restaurantId) return;
+    if (!order?.restaurantId) return;
     (async () => {
       try {
         const { data } = await axios.get(`${restaurantService}/api/restaurant/${order.restaurantId}`, {
           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
         });
-        // fetchSingleRestaurant returns the restaurant object directly (not nested)
-        if (data?.autoLocation?.coordinates) {
-          const [lng, lat] = data.autoLocation.coordinates;
-          setRestaurantCoordinates([lat, lng]);
+        // Prefer the GeoJSON `location` field [lng, lat], fall back to autoLocation
+        if (data?.location?.coordinates?.length === 2) {
+          const [lng, lat] = data.location.coordinates;
+          if (lat && lng) { setRestaurantCoordinates([lat, lng]); return; }
         }
-      } catch { }
+        if (data?.autoLocation?.coordinates?.length === 2) {
+          const [lng, lat] = data.autoLocation.coordinates;
+          if (lat && lng) { setRestaurantCoordinates([lat, lng]); return; }
+        }
+        // Last resort: use embedded order coordinates
+        if (order.restaurantLocation?.latitude && order.restaurantLocation?.longitude) {
+          setRestaurantCoordinates([order.restaurantLocation.latitude, order.restaurantLocation.longitude]);
+        }
+      } catch {
+        // Network error — fall back to embedded coordinates
+        if (order.restaurantLocation?.latitude && order.restaurantLocation?.longitude) {
+          setRestaurantCoordinates([order.restaurantLocation.latitude, order.restaurantLocation.longitude]);
+        }
+      }
     })();
-  }, [order?.restaurantId, order?.restaurantLocation]);
+  }, [order?.restaurantId]);
 
   useEffect(() => {
     if (!order) { setRiderLocation(null); return; }
@@ -352,7 +382,7 @@ const OrderPage = () => {
   // Show map from the moment the order is placed through delivery
   const showMap = !isCancelled && restaurantCoordinates && order.deliveryAddress?.latitude;
   const currentStatusIndex = STATUS_SEQUENCE.indexOf(order.status as any);
-  const eta = getETAMinutes(order.status);
+  const eta = getDynamicETAMinutes(order.status, order.distance);
   const staleSeconds = lastRiderUpdatedAt ? Math.floor((Date.now() - lastRiderUpdatedAt) / 1000) : null;
   const isStale = staleSeconds != null && staleSeconds >= 20;
 

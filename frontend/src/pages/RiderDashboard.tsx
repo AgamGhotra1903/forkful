@@ -13,7 +13,7 @@ import IdlePanel from "../components/IdlePanel";
 import RiderOrderRequest from "../components/RiderOrderRequest";
 import RiderIdleMap from "../components/RiderIdleMap";
 import ForkfulLogo from "../components/ForkfulLogo";
-import { BiLogOut } from "react-icons/bi";
+import { BiLogOut, BiCog } from "react-icons/bi";
 
 interface IRider {
   _id: string;
@@ -45,6 +45,8 @@ const RiderDashboard = () => {
   const [profile, setProfile] = useState<IRider | null>(null);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
+  const [aadharInput, setAadharInput] = useState("");
+  const [uploadingAadhar, setUploadingAadhar] = useState(false);
   const [currentOrders, setCurrentOrders] = useState<IOrder[]>([]);
   const [activeOrderIndex, setActiveOrderIndex] = useState<number>(0);
   const currentOrder = currentOrders[activeOrderIndex] || null;
@@ -292,6 +294,28 @@ const RiderDashboard = () => {
     navigate("/login");
   };
 
+  const handleUploadAadhar = async () => {
+    if (!aadharInput.trim()) {
+      toast.error("Please enter a valid Aadhar number");
+      return;
+    }
+    setUploadingAadhar(true);
+    try {
+      const { data } = await axios.put(
+        `${riderService}/api/rider/aadhar`,
+        { aadharNumber: aadharInput },
+        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+      );
+      setProfile(data.rider);
+      toast.success("Aadhar updated successfully. Please wait for admin review.");
+      setAadharInput("");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to update Aadhar");
+    } finally {
+      setUploadingAadhar(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-[var(--bg-base)]">
@@ -305,6 +329,65 @@ const RiderDashboard = () => {
 
   return (
     <div className="h-screen relative overflow-hidden">
+
+      {profile && !profile.isVerified && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/65 backdrop-blur-md px-4">
+          <div 
+            className="w-full max-w-sm p-6 space-y-4 rounded-3xl border shadow-2xl reveal text-center"
+            style={{
+              backgroundColor: "var(--color-surface, #1e293b)",
+              borderColor: "rgba(255, 87, 51, 0.35)",
+              boxShadow: "0 12px 40px rgba(255, 87, 51, 0.15)"
+            }}
+          >
+            <div className="w-12 h-12 rounded-full flex items-center justify-center bg-orange-500/10 border border-orange-500/25 mx-auto text-2xl select-none">
+              ⚠️
+            </div>
+            
+            <div className="space-y-1">
+              <h3 className="text-base font-black font-display text-[var(--color-ink)]">
+                Rider Verification Desk
+              </h3>
+              <p className="text-xs text-[var(--color-manifest)] leading-relaxed">
+                Your profile must be manually verified by a platform admin using your Aadhar number before you can accept deliveries.
+              </p>
+            </div>
+
+            <div className="space-y-3 pt-2 text-left">
+              <div className="space-y-1">
+                <label className="text-[9px] font-mono tracking-wider uppercase font-bold text-slate-400">
+                  Aadhar Number (Current: {profile.aadharNumber || "None"})
+                </label>
+                <input 
+                  type="text" 
+                  placeholder="Enter 12-digit Aadhar"
+                  value={aadharInput}
+                  onChange={(e) => setAadharInput(e.target.value)}
+                  className="w-full text-xs px-4 py-3 rounded-xl outline-none glass-input"
+                />
+              </div>
+
+              <div className="flex gap-2.5 pt-1">
+                <button 
+                  onClick={handleLogout}
+                  className="flex-1 h-11 rounded-xl text-xs font-bold font-mono tracking-wider uppercase border text-[var(--color-manifest)] hover:text-[var(--color-alert)] transition-all cursor-pointer"
+                  style={{ borderColor: "var(--color-rule)" }}
+                >
+                  Sign Out
+                </button>
+                <button 
+                  onClick={handleUploadAadhar}
+                  disabled={uploadingAadhar}
+                  className="flex-[2] h-11 text-xs font-bold text-white rounded-xl active:scale-[0.98] transition cursor-pointer"
+                  style={{ backgroundColor: "var(--color-route)" }}
+                >
+                  {uploadingAadhar ? "Submitting..." : "Submit Aadhar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Rider Rating Notification ── passive, read-only, auto-dismisses in 30 s */}
       {ratingNotification && (
@@ -374,7 +457,7 @@ const RiderDashboard = () => {
       ) : (
         // FIXED: Real live map when idle, not a blank div
         <div className="fixed inset-0 z-0">
-          <RiderIdleMap />
+          <RiderIdleMap isOnline={profile?.isAvailable ?? false} />
         </div>
       )}
 
@@ -420,6 +503,15 @@ const RiderDashboard = () => {
               }`}
             />
             {profile?.isAvailable ? "Online" : "Offline"}
+          </button>
+
+          {/* Settings button */}
+          <button
+            onClick={() => navigate("/account")}
+            className="glass-card w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-[var(--color-manifest)] hover:text-[var(--color-route)] transition-colors cursor-pointer"
+            aria-label="Account Settings"
+          >
+            <BiCog className="text-base sm:text-lg" />
           </button>
 
           {/* Logout button */}

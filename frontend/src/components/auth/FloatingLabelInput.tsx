@@ -54,10 +54,10 @@ export const FloatingLabelInput = ({
           background: focused
             ? "rgba(255,255,255,0.07)"
             : "rgba(255,255,255,0.03)",
-          border: `1.5px solid ${focused ? "var(--color-route)" : "var(--color-rule)"}`,
+          border: `1.5px solid ${focused ? "#FF5733" : "var(--color-rule)"}`,
           boxShadow: focused
-            ? "0 0 0 3px rgba(255,87,51,0.12), inset 0 2px 4px rgba(0,0,0,0.08)"
-            : "inset 0 2px 4px rgba(0,0,0,0.04)",
+            ? "0 0 0 3px rgba(255,87,51,0.12), inset 0 2px 4px rgba(0,0,0,0.04)"
+            : "none",
           color: "var(--color-ink)",
           fontFamily: "var(--font-body)",
           paddingRight: showToggle ? "3rem" : "1rem",
@@ -76,7 +76,7 @@ export const FloatingLabelInput = ({
           transformOrigin: "left top",
           transition: "all 0.18s cubic-bezier(0.4,0,0.2,1)",
           pointerEvents: "none",
-          color: focused ? "var(--color-route)" : "var(--color-ghost)",
+          color: focused ? "#FF5733" : "var(--color-ghost)",
           fontWeight: 600,
           fontSize: "0.875rem",
           fontFamily: "var(--font-body)",

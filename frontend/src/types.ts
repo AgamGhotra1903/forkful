@@ -46,6 +46,7 @@ export interface IRestaurant {
   isVerified: boolean;
   ratingCount?: number;
   overallRating?: number;
+  aadharNumber?: string;
 
   autoLocation: {
     type: "Point";

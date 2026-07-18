@@ -1,5 +1,6 @@
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams, useNavigate, Link } from "react-router-dom";
 import { useAppData } from "../context/AppContext";
+import { getDeliveryEstimate, getFallbackEstimate } from "../utils/deliveryEstimate";
 import { useEffect, useState } from "react";
 import type { IRestaurant } from "../types";
 import axios from "axios";
@@ -250,7 +251,6 @@ const getRealRating = (res: IRestaurant) => {
   const n = id.charCodeAt(id.length - 1) + id.charCodeAt(id.length - 2);
   return ((n % 10) / 10 + 4.0).toFixed(1);
 };
-const getMockDuration = (id: string) => (id.charCodeAt(id.length - 1) % 20) + 20;
 const getMockCost = (id: string) => {
   const n = id.charCodeAt(id.length - 2) ?? 6;
   return (Math.floor(n / 3) + 2) * 100;
@@ -325,11 +325,19 @@ const saveRecentlyViewed = (res: IRestaurant) => {
   }
 };
 
-const RestaurantCard = ({ restaurant, distance }: { restaurant: IRestaurant; distance: number }) => {
+const RestaurantCard = ({ restaurant, distance, userCoords }: { restaurant: IRestaurant; distance: number; userCoords?: { latitude: number; longitude: number } | null }) => {
   const navigate = useNavigate();
   const shouldReduceMotion = useReducedMotion();
   const rating = getRealRating(restaurant);
-  const duration = getMockDuration(restaurant._id);
+
+  // Use real haversine estimate if restaurant has coordinates and user location is known
+  const restaurantCoords = restaurant.autoLocation?.coordinates
+    ? { latitude: restaurant.autoLocation.coordinates[1], longitude: restaurant.autoLocation.coordinates[0] }
+    : null;
+  const deliveryTime = (restaurantCoords && userCoords)
+    ? getDeliveryEstimate(restaurantCoords, userCoords)
+    : getFallbackEstimate(restaurant._id);
+
   const cost = getMockCost(restaurant._id);
   const isOpen = restaurant.isOpen;
   const ratingNum = parseFloat(rating);
@@ -389,7 +397,7 @@ const RestaurantCard = ({ restaurant, distance }: { restaurant: IRestaurant; dis
           style={{ backgroundColor: "rgba(0,0,0,0.72)", backdropFilter: "blur(6px)" }}
         >
           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-          {duration}–{duration + 5} min
+          {deliveryTime}
         </div>
 
         {/* Discount badge */}
@@ -442,8 +450,18 @@ const RestaurantCard = ({ restaurant, distance }: { restaurant: IRestaurant; dis
         }}
       >
         <div className="flex items-start justify-between gap-2 mb-1">
-          <h3 className="text-sm font-bold leading-snug truncate" style={{ color: "var(--color-ink)" }}>
-            {restaurant.name}
+          <h3 className="text-sm font-bold leading-snug truncate flex items-center gap-1" style={{ color: "var(--color-ink)" }}>
+            <span className="truncate">{restaurant.name}</span>
+            {restaurant.isVerified && (
+              <span
+                title="Aadhaar Verified Restaurant"
+                style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", width: 15, height: 15, borderRadius: "50%", background: "#1d9bf0" }}
+              >
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="white" aria-label="Verified">
+                  <path d="M9 12l2 2 4-4" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                </svg>
+              </span>
+            )}
           </h3>
           <span
             className="flex items-center gap-1 text-xs font-bold flex-shrink-0 px-1.5 py-0.5 rounded-md glow-orange"
@@ -983,7 +1001,11 @@ const Home = () => {
     }
 
     if (activeFilter === "open" && !res.isOpen) return false;
-    if (activeFilter === "fast" && getMockDuration(res._id) > 28) return false;
+    if (activeFilter === "fast") {
+      const [lng, lat] = res.autoLocation?.coordinates || [77.2090, 28.6139];
+      const resDistKm = getDistanceKm(location?.latitude || 28.6139, location?.longitude || 77.2090, lat, lng);
+      return resDistKm <= 3;
+    }
     if (activeFilter === "top" && parseFloat(getRealRating(res)) < 4.5) return false;
 
     return true;
@@ -1000,62 +1022,71 @@ const Home = () => {
     <main className="min-h-screen" style={{ backgroundColor: "var(--bg-base)" }}>
 
       {/* ── Hero section ── */}
-      <section className="relative w-full" style={{ minHeight: 400, background: "linear-gradient(135deg, #0B0F19 0%, #1a0a05 60%, #0B0F19 100%)" }}>
-        {/* Background image (no parallax to avoid overflow:hidden clipping) */}
-        <div className="absolute inset-0 z-0 overflow-hidden">
+      <section className="relative w-full overflow-hidden" style={{ minHeight: 440, background: "linear-gradient(135deg, #090B11 0%, #150906 45%, #0C0705 75%, #090B11 100%)" }}>
+        {/* Futuristic Background overlay (Mesh Grid + Scanning Lines) */}
+        <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+          {/* Tech Grid */}
+          <div 
+            className="absolute inset-0 opacity-[0.06]" 
+            style={{
+              backgroundImage: "radial-gradient(rgba(255,87,51,0.15) 1px, transparent 1px), linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px)",
+              backgroundSize: "20px 20px, 40px 40px, 40px 40px",
+            }}
+          />
+          {/* Main Hero Background image with gradient blend */}
           <img
             src="https://images.unsplash.com/photo-1504674900247-0877df9cc836?q=80&w=1200&auto=format&fit=crop"
             alt="Hero background"
-            className="w-full h-full object-cover opacity-40"
+            className="w-full h-full object-cover opacity-20 mix-blend-luminosity"
           />
           <div
             className="absolute inset-0"
-            style={{ background: "linear-gradient(135deg, rgba(11,15,25,0.75) 0%, rgba(11,15,25,0.4) 55%, rgba(11,15,25,0.65) 100%)" }}
+            style={{ background: "linear-gradient(180deg, rgba(9,11,17,0) 0%, rgba(9,11,17,0.7) 80%, #090B11 100%)" }}
           />
           {/* Ambient Gradient Drift Blobs */}
           {!shouldReduceMotion && (
             <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
               <motion.div
                 animate={{
-                  x: ["-20%", "30%", "-20%"],
-                  y: ["-10%", "20%", "-10%"],
+                  x: ["-20%", "20%", "-20%"],
+                  y: ["-10%", "15%", "-10%"],
                 }}
                 transition={{
-                  duration: 25,
+                  duration: 22,
                   repeat: Infinity,
                   ease: "linear"
                 }}
-                className="absolute w-[400px] h-[400px] rounded-full opacity-[0.15]"
+                className="absolute w-[450px] h-[450px] rounded-full opacity-[0.16]"
                 style={{
-                  background: "radial-gradient(circle, #FF5733 0%, transparent 70%)",
-                  filter: "blur(60px)",
-                  left: "10%",
-                  top: "10%"
+                  background: "radial-gradient(circle, rgba(255,87,51,0.9) 0%, transparent 70%)",
+                  filter: "blur(70px)",
+                  left: "5%",
+                  top: "5%"
                 }}
               />
               <motion.div
                 animate={{
                   x: ["20%", "-20%", "20%"],
-                  y: ["10%", "-10%", "10%"],
+                  y: ["15%", "-10%", "15%"],
                 }}
                 transition={{
-                  duration: 30,
+                  duration: 26,
                   repeat: Infinity,
                   ease: "linear"
                 }}
-                className="absolute w-[500px] h-[500px] rounded-full opacity-[0.12]"
+                className="absolute w-[550px] h-[550px] rounded-full opacity-[0.12]"
                 style={{
-                  background: "radial-gradient(circle, #9b5de5 0%, transparent 70%)",
-                  filter: "blur(70px)",
-                  right: "10%",
-                  bottom: "10%"
+                  background: "radial-gradient(circle, rgba(155,93,229,0.7) 0%, transparent 70%)",
+                  filter: "blur(80px)",
+                  right: "5%",
+                  bottom: "5%"
                 }}
               />
             </div>
           )}
         </div>
 
-        <div className="relative z-10 mx-auto max-w-5xl px-4 pt-12 pb-10">
+        <div className="relative z-10 mx-auto max-w-5xl px-4 pt-14 pb-12">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
 
             {/* Left — headline + search + stat chips */}
@@ -1063,18 +1094,26 @@ const Home = () => {
               <div className="md:hidden flex justify-center mb-2">
                 <PanToss />
               </div>
-              <div className="space-y-3 animate-slide-up">
-                <p className="eyebrow">🍳 Food Delivery Platform</p>
+              <div className="space-y-3.5 animate-slide-up">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-orange-500/10 bg-orange-500/5 text-[10px] font-mono tracking-widest uppercase font-bold text-orange-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+                  Food Delivery Platform
+                </div>
                 <h1
                   className="font-black text-white leading-[0.95]"
-                  style={{ fontFamily: "var(--font-display)", fontSize: "clamp(2.5rem, 6vw, 4.5rem)", letterSpacing: "-0.02em" }}
+                  style={{ 
+                    fontFamily: "var(--font-display)", 
+                    fontSize: "clamp(2.5rem, 6vw, 4.2rem)", 
+                    letterSpacing: "-0.03em",
+                    textShadow: "0 0 40px rgba(255,87,51,0.22)"
+                  }}
                 >
                   {greetingTitle.split(",")[0]},
                   <br />
                   <span className="headline-gradient">{greetingTitle.split(",")[1]?.trim() ?? ""}</span>
                 </h1>
-                <p className="text-base" style={{ color: "rgba(255,255,255,0.65)", maxWidth: 420, fontFamily: "var(--font-body)" }}>
-                  {greetingSubtitle} Discover the best restaurants near you, delivered fast.
+                <p className="text-sm" style={{ color: "var(--color-manifest)", maxWidth: 430, fontFamily: "var(--font-body)", lineHeight: 1.6 }}>
+                  {greetingSubtitle} Discover the best culinary storefronts near you, delivered at lightspeed.
                 </p>
               </div>
 
@@ -1083,118 +1122,80 @@ const Home = () => {
                 style={{
                   position: "relative",
                   animationDelay: "0.1s",
-                  background:
-                    "linear-gradient(135deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.04) 100%)",
+                  background: "linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)",
                   backdropFilter: "blur(32px) saturate(200%)",
                   WebkitBackdropFilter: "blur(32px) saturate(200%)",
-                  border: "1px solid rgba(255,255,255,0.15)",
+                  border: "1px solid rgba(255,255,255,0.08)",
                   borderRadius: "var(--radius-xl)",
-                  boxShadow:
-                    "inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -1px 0 rgba(0,0,0,0.15), 0 8px 32px rgba(0,0,0,0.35)",
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.1), 0 12px 40px rgba(0,0,0,0.5)",
                 }}
               >
                 <div aria-hidden="true" style={{
-                  position: "absolute", top: 0, left: "12px", right: "12px", height: "1px",
-                  background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent)",
+                  position: "absolute", top: 0, left: "16px", right: "16px", height: "1px",
+                  background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent)",
                   borderRadius: "1px", pointerEvents: "none",
                 }} />
-                <div className="flex items-center gap-2 mb-3">
+                
+                {/* Location pill */}
+                <div className="flex items-center gap-2 mb-3.5 px-3 py-1.5 rounded-full border border-white/5 bg-white/[0.02] w-fit">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FF5733" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
                     <circle cx="12" cy="10" r="3" />
                   </svg>
-                  <span className="text-xs font-semibold truncate max-w-[200px]" style={{ color: "rgba(255,255,255,0.8)", fontFamily: "var(--font-body)" }}>
+                  <span className="text-[10px] font-bold tracking-wide truncate max-w-[200px]" style={{ color: "var(--color-ink)", fontFamily: "var(--font-mono)" }}>
                     {location?.formattedAddress?.split(",")[0] ?? "Detecting location…"}
                   </span>
-                  <span className="ml-auto text-[9px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(34,197,94,0.15)", color: "#22c55e", fontFamily: "var(--font-body)" }}>
-                    ● Live
+                  <span className="relative flex h-1.5 w-1.5 ml-1">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span>
                   </span>
                 </div>
+
                 <AISearchBar
                   value={search}
                   onChange={handleSearchChange}
                   placeholder="Search for restaurants, cuisines or dishes…"
                 />
+                
                 <div style={{
-                  position: "absolute", bottom: "-40px", left: "50%", transform: "translateX(-50%)",
-                  width: "60%", height: "80px",
-                  background: "radial-gradient(ellipse, rgba(255,87,51,0.18) 0%, transparent 70%)",
+                  position: "absolute", bottom: "-30px", left: "50%", transform: "translateX(-50%)",
+                  width: "70%", height: "60px",
+                  background: "radial-gradient(ellipse, rgba(255,87,51,0.15) 0%, transparent 70%)",
                   filter: "blur(20px)",
                   pointerEvents: "none",
                   zIndex: -1,
                 }} aria-hidden="true" />
               </div>
 
-              {/* Stat chips */}
+              {/* Futuristic Stat chips */}
               <div className="flex gap-3 flex-wrap animate-slide-up" style={{ animationDelay: "0.2s" }}>
-                <div
-                  className="px-4 py-2 rounded-2xl animate-fade-in"
-                  style={{
-                    background:
-                      "linear-gradient(145deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.04) 100%)",
-                    backdropFilter: "blur(20px) saturate(180%)",
-                    WebkitBackdropFilter: "blur(20px) saturate(180%)",
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    borderRadius: "var(--radius-lg)",
-                    boxShadow:
-                      "inset 0 1px 0 rgba(255,255,255,0.15), 0 4px 16px rgba(0,0,0,0.25)",
-                    position: "relative",
-                    overflow: "hidden",
-                  }}
-                >
-                  <motion.div whileHover={{ y: -2, scale: 1.04 }} transition={{ type: "spring", stiffness: 400, damping: 20 }}>
-                    <p className="eyebrow" style={{ marginBottom: 2 }}>ORDERS</p>
-                    <p className="text-sm font-black" style={{ fontFamily: "var(--font-display)", color: "white" }}>
-                      <CountUp end={4200} suffix="+" />
-                    </p>
+                {[
+                  { label: "ORDERS DELIVERED", value: "4,200+", detail: "Across the city" },
+                  { label: "AVG DELIVERY TIME", value: "22 min", detail: "Lightning fast" },
+                  { label: "PLATFORM RATING", value: "4.9 ★", detail: "Loved by users" }
+                ].map((stat, i) => (
+                  <motion.div
+                    key={i}
+                    whileHover={{ y: -4, scale: 1.02 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                    className="px-4 py-2.5 rounded-2xl cursor-pointer"
+                    style={{
+                      background: "linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)",
+                      backdropFilter: "blur(24px) saturate(180%)",
+                      WebkitBackdropFilter: "blur(24px) saturate(180%)",
+                      border: "1px solid rgba(255,255,255,0.07)",
+                      borderRadius: "var(--radius-lg)",
+                      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08), 0 8px 24px -8px rgba(0,0,0,0.5)",
+                    }}
+                  >
+                    <p className="text-[8px] font-bold tracking-widest font-mono text-[var(--color-ghost)] mb-1">{stat.label}</p>
+                    <p className="text-base font-black text-white leading-none font-display">{stat.value}</p>
+                    <p className="text-[9px] text-[var(--color-manifest)] mt-1 font-body">{stat.detail}</p>
                   </motion.div>
-                </div>
-                <div
-                  className="px-4 py-2 rounded-2xl animate-fade-in"
-                  style={{
-                    background:
-                      "linear-gradient(145deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.04) 100%)",
-                    backdropFilter: "blur(20px) saturate(180%)",
-                    WebkitBackdropFilter: "blur(20px) saturate(180%)",
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    borderRadius: "var(--radius-lg)",
-                    boxShadow:
-                      "inset 0 1px 0 rgba(255,255,255,0.15), 0 4px 16px rgba(0,0,0,0.25)",
-                    position: "relative",
-                    overflow: "hidden",
-                  }}
-                >
-                  <motion.div whileHover={{ y: -2, scale: 1.04 }} transition={{ type: "spring", stiffness: 400, damping: 20 }}>
-                    <p className="eyebrow" style={{ marginBottom: 2 }}>AVG DELIVERY</p>
-                    <p className="text-sm font-black" style={{ fontFamily: "var(--font-display)", color: "white" }}>
-                      <CountUp end={22} suffix=" min" />
-                    </p>
-                  </motion.div>
-                </div>
-                <div
-                  className="px-4 py-2 rounded-2xl animate-fade-in"
-                  style={{
-                    background:
-                      "linear-gradient(145deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.04) 100%)",
-                    backdropFilter: "blur(20px) saturate(180%)",
-                    WebkitBackdropFilter: "blur(20px) saturate(180%)",
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    borderRadius: "var(--radius-lg)",
-                    boxShadow:
-                      "inset 0 1px 0 rgba(255,255,255,0.15), 0 4px 16px rgba(0,0,0,0.25)",
-                    position: "relative",
-                    overflow: "hidden",
-                  }}
-                >
-                  <motion.div whileHover={{ y: -2, scale: 1.04 }} transition={{ type: "spring", stiffness: 400, damping: 20 }}>
-                    <p className="eyebrow" style={{ marginBottom: 2 }}>TOP RATED</p>
-                    <p className="text-sm font-black" style={{ fontFamily: "var(--font-display)", color: "white" }}>
-                      <CountUp end={4.9} decimals={1} suffix=" ★" />
-                    </p>
-                  </motion.div>
-                </div>
+                ))}
               </div>
             </div>
+
 
             {/* Right — floating restaurant card */}
             <div className="hidden md:flex items-center justify-center">
@@ -1770,7 +1771,7 @@ const Home = () => {
                 const dist = getDistanceKm(location?.latitude || 28.6139, location?.longitude || 77.2090, lat, lng);
                 return (
                   <motion.div key={res._id} variants={itemVariants}>
-                    <RestaurantCard restaurant={res} distance={dist} />
+                    <RestaurantCard restaurant={res} distance={dist} userCoords={location} />
                   </motion.div>
                 );
               })}

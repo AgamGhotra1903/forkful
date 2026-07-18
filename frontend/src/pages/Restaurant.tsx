@@ -49,6 +49,8 @@ const Restaurant = () => {
   // Insights panel has been replaced with a plain Customer Reviews list.
   const [reviews, setReviews] = useState<any[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [aadharInput, setAadharInput] = useState("");
+  const [uploadingAadhar, setUploadingAadhar] = useState(false);
 
   const fetchMyRestaurant = async () => {
     try {
@@ -176,9 +178,31 @@ const Restaurant = () => {
       setRestaurant({ ...restaurant, isOpen: nextOpen });
       toast.success(nextOpen ? "Restaurant opened" : "Restaurant closed");
     } catch (err: any) {
-      toast.error("Failed to update status");
+      toast.error(err.response?.data?.message || "Failed to update status");
     } finally {
       setTogglingStatus(false);
+    }
+  };
+
+  const handleUploadAadhar = async () => {
+    if (!aadharInput.trim()) {
+      toast.error("Please enter a valid Aadhar number");
+      return;
+    }
+    setUploadingAadhar(true);
+    try {
+      const { data } = await axios.put(
+        `${restaurantService}/api/restaurant/aadhar`,
+        { aadharNumber: aadharInput },
+        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+      );
+      setRestaurant(data.restaurant);
+      toast.success("Aadhar uploaded successfully. Awaiting admin review.");
+      setAadharInput("");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to upload Aadhar");
+    } finally {
+      setUploadingAadhar(false);
     }
   };
 
@@ -314,7 +338,19 @@ const Restaurant = () => {
             style={{ borderColor: "var(--color-rule)" }}
           />
           <div className="min-w-0 flex-1">
-            <h2 className="text-xs font-bold truncate leading-snug" style={{ color: "var(--color-ink)" }}>{restaurant.name}</h2>
+            <h2 className="text-xs font-bold truncate leading-snug flex items-center gap-1" style={{ color: "var(--color-ink)" }}>
+              <span className="truncate">{restaurant.name}</span>
+              {restaurant.isVerified && (
+                <span
+                  title="Aadhaar Verified"
+                  style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", width: 13, height: 13, borderRadius: "50%", background: "#1d9bf0" }}
+                >
+                  <svg width="7" height="7" viewBox="0 0 24 24" fill="none" aria-label="Verified">
+                    <path d="M5 13l4 4L19 7" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </span>
+              )}
+            </h2>
             <span className="text-[9px] font-body tracking-wider uppercase font-bold" style={{ color: "var(--color-ghost)" }}>Seller</span>
           </div>
         </div>
@@ -377,6 +413,52 @@ const Restaurant = () => {
                   </p>
                 </div>
               </div>
+
+              {!restaurant.isVerified && (
+                <div 
+                  className="p-5 space-y-4 glass-card border reveal"
+                  style={{
+                    borderColor: "rgba(245, 158, 11, 0.35)",
+                    background: "linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, rgba(15, 23, 42, 0.4) 100%)",
+                    borderRadius: "var(--radius-xl)"
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl select-none">⚠️</span>
+                    <div>
+                      <h3 className="text-sm font-bold font-display" style={{ color: "var(--color-ink)" }}>
+                        Verification Pending
+                      </h3>
+                      <p className="text-[11px]" style={{ color: "var(--color-manifest)" }}>
+                        Your restaurant registration must be verified by an admin using your Aadhar number before you can open kitchen operations.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-700/30 flex flex-col sm:flex-row gap-3 items-end">
+                    <div className="flex-1 space-y-1">
+                      <label className="text-[9px] font-mono tracking-wider uppercase font-bold text-slate-400">
+                        Aadhar Number (Current: {restaurant.aadharNumber || "None"})
+                      </label>
+                      <input 
+                        type="text" 
+                        placeholder="Enter 12-digit Aadhar (e.g. 1234-5678-9012)"
+                        value={aadharInput}
+                        onChange={(e) => setAadharInput(e.target.value)}
+                        className="w-full text-xs px-4 py-3 rounded-xl outline-none glass-input"
+                      />
+                    </div>
+                    <button 
+                      onClick={handleUploadAadhar}
+                      disabled={uploadingAadhar}
+                      className="px-5 h-10 text-xs font-bold text-white rounded-xl active:scale-[0.98] transition cursor-pointer"
+                      style={{ backgroundColor: "var(--color-route)" }}
+                    >
+                      {uploadingAadhar ? "Uploading..." : "Upload & Re-submit"}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Stats Row */}
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -754,6 +836,39 @@ const Restaurant = () => {
               <AddMenuItem onItemAdded={() => { fetchMenuItems(restaurant._id); setActiveSection("menu"); }} />
 
               <RestaurantProfile restaurant={restaurant} onUpdate={setRestaurant} isSeller={true} />
+
+              <div 
+                className="p-6 rounded-3xl glass-card space-y-4 border reveal mt-4" 
+                style={{ 
+                  borderColor: "rgba(255, 87, 51, 0.25)",
+                  background: "linear-gradient(135deg, rgba(255,87,51,0.02) 0%, rgba(15,23,42,0.4) 100%)"
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <div 
+                    className="w-10 h-10 rounded-2xl flex items-center justify-center text-lg font-bold text-white flex-shrink-0"
+                    style={{ background: "linear-gradient(135deg, var(--color-route) 0%, var(--color-thermal) 100%)" }}
+                  >
+                    🆔
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold font-display" style={{ color: "var(--color-ink)" }}>Account Verification & Security</h3>
+                    <p className="text-xs text-[var(--color-manifest)] mt-0.5">
+                      Verify your registration, view/update Aadhar number details, and manage profile security locks.
+                    </p>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-slate-700/30 flex justify-between items-center">
+                  <span className="text-[10px] font-mono text-slate-400">Current Status: {restaurant.isVerified ? "✅ Verified" : "⚠️ Verification Pending"}</span>
+                  <button 
+                    onClick={() => navigate("/account")}
+                    className="h-10 px-5 text-xs font-bold text-white rounded-xl active:scale-[0.98] transition cursor-pointer"
+                    style={{ backgroundColor: "var(--color-route)" }}
+                  >
+                    Go to Verification Center
+                  </button>
+                </div>
+              </div>
             </div>
           )}
     </DashboardShell>

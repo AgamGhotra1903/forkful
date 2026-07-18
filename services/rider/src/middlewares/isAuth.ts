@@ -62,7 +62,28 @@ export const isAuth = async (
       return;
     }
 
-    req.user = decodedValue.user;
+    // Always fetch fresh user from DB so that role changes (e.g. user selected
+    // "rider" role after their initial Google login) are reflected immediately
+    // without requiring a re-login. The JWT only carries the user id reliably.
+    const userId = decodedValue.user._id;
+    const freshUser = await mongoose.connection.db
+      ?.collection("users")
+      .findOne({ _id: new mongoose.Types.ObjectId(userId) });
+
+    if (!freshUser) {
+      res.status(401).json({ message: "User not found" });
+      return;
+    }
+
+    req.user = {
+      _id: freshUser._id.toString(),
+      name: freshUser.name,
+      email: freshUser.email,
+      image: freshUser.image,
+      role: freshUser.role,           // always the current DB value
+      restaurantId: freshUser.restaurantId,
+    };
+
     next();
   } catch (error) {
     res.status(500).json({

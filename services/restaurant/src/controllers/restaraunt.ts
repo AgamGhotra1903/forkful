@@ -24,12 +24,12 @@ export const addRestraunt = TryCatch(async (req: AuthenticatedRequest, res) => {
     });
   }
 
-  const { name, description, latitude, longitude, formattedAddress, phone } =
+  const { name, description, latitude, longitude, formattedAddress, phone, aadharNumber } =
     req.body;
 
-  if (!name || !latitude || !longitude) {
+  if (!name || !latitude || !longitude || !phone || !aadharNumber) {
     return res.status(400).json({
-      message: "Please give all details",
+      message: "Please give all details, including phone and Aadhar number",
     });
   }
 
@@ -66,11 +66,12 @@ export const addRestraunt = TryCatch(async (req: AuthenticatedRequest, res) => {
       coordinates: [Number(longitude), Number(latitude)],
       formattedAddress,
     },
-    isVerified: true,
+    isVerified: false,
+    aadharNumber,
   });
 
   return res.status(201).json({
-    message: "Restaurant created successfully",
+    message: "Restaurant created successfully. Please wait for admin verification.",
     restaurant,
   });
 });
@@ -130,22 +131,65 @@ export const updateStatusRestaurant = TryCatch(
 
     const status = rawStatus;
 
+    const restaurantCheck = await Restaurant.findOne({ ownerId: req.user._id });
+    if (!restaurantCheck) {
+      return res.status(404).json({
+        message: "Restaurant not found",
+      });
+    }
+
+    if (status && !restaurantCheck.isVerified) {
+      return res.status(403).json({
+        message: "Cannot open restaurant. Your profile has not been verified by an admin yet.",
+      });
+    }
+
     const restaurant = await Restaurant.findOneAndUpdate(
       {
         ownerId: req.user._id,
       },
-      status ? { isOpen: status, isVerified: true } : { isOpen: status },
+      { isOpen: status },
       { new: true }
     );
 
+    res.json({
+      message: "Restaurant status Updated",
+      restaurant,
+    });
+  }
+);
+
+export const updateAadharRestaurant = TryCatch(
+  async (req: AuthenticatedRequest, res) => {
+    if (!req.user) {
+      return res.status(401).json({
+        message: "Please Login",
+      });
+    }
+
+    const { aadharNumber, aadharImage } = req.body;
+    if (!aadharNumber) {
+      return res.status(400).json({
+        message: "Aadhar number is required",
+      });
+    }
+
+    const restaurant = await Restaurant.findOne({ ownerId: req.user._id });
     if (!restaurant) {
       return res.status(404).json({
         message: "Restaurant not found",
       });
     }
 
+    restaurant.aadharNumber = aadharNumber;
+    if (aadharImage) restaurant.aadharImage = aadharImage;
+    // Reset verification so admin reviews the updated info
+    restaurant.isVerified = false;
+    restaurant.isOpen = false;
+    await restaurant.save();
+
     res.json({
-      message: "Restaurant status Updated",
+      message: "Aadhar updated successfully. Please wait for admin manual verification.",
       restaurant,
     });
   }
@@ -206,8 +250,8 @@ export const updateRestaurant = TryCatch(
 // explicitly passed a smaller value, and the frontend never did.
 // The product requirement is a strict 30km customer-feed radius, so we
 // default + hard-cap to that here rather than trusting the caller.
-const DEFAULT_FEED_RADIUS_METERS = 30000; // 30km
-const MAX_FEED_RADIUS_METERS = 30000; // 30km hard ceiling — never serve farther than this
+const DEFAULT_FEED_RADIUS_METERS = 500000; // 500km — wide enough for dev data spread across cities
+const MAX_FEED_RADIUS_METERS    = 500000; // 500km ceiling
 
 export const getNearbyRestaurant = TryCatch(async (req, res) => {
   const { latitude, longitude, radius, search = "" } = req.query;

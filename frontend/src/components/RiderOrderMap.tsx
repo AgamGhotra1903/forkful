@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
@@ -22,11 +22,33 @@ const destIcon = L.divIcon({
   iconAnchor: [8, 8],
 });
 
+// FitBounds: only re-fits when the set of coordinates actually changes value (not reference)
 function FitBounds({ positions }: { positions: [number, number][] }) {
   const map = useMap();
+  const lastKeyRef = useRef("");
   useEffect(() => {
-    if (positions.length >= 2) map.fitBounds(positions as any, { padding: [40, 40] });
+    if (positions.length < 2) return;
+    const key = JSON.stringify(positions);
+    if (key === lastKeyRef.current) return;
+    lastKeyRef.current = key;
+    map.fitBounds(positions as any, { padding: [40, 40] });
   }, [positions, map]);
+  return null;
+}
+
+// MapUpdater: smoothly follows the rider marker as position updates
+function MapUpdater({ position }: { position: [number, number] | null }) {
+  const map = useMap();
+  const prevRef = useRef<[number, number] | null>(null);
+  useEffect(() => {
+    if (!position) return;
+    if (!prevRef.current) {
+      map.setView(position, map.getZoom());
+    } else {
+      map.flyTo(position, map.getZoom(), { animate: true, duration: 1.2 });
+    }
+    prevRef.current = position;
+  }, [position, map]);
   return null;
 }
 
@@ -38,8 +60,6 @@ const RiderOrderMap = ({ order }: RiderOrderMapProps) => {
   const { socket } = useSocket();
   const [myLocation, setMyLocation] = useState<[number, number] | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
-
-
 
   const emitLocation = async (latitude: number, longitude: number) => {
     // Keep existing REST update (core rider location flow)
@@ -55,43 +75,32 @@ const RiderOrderMap = ({ order }: RiderOrderMapProps) => {
       )
       .catch((err) => console.error("Rider location update failed:", err));
 
-    // Real-time relay (customer tracking + rider self-map)
+    // Real-time relay to customer tracking page.
+    // FIX: use the same event name ("rider:location_update"), room ("order:<id>"),
+    // and payload shape ({ lat, lng }) that OrderPage expects.
     const token = localStorage.getItem("token");
     if (!token) return;
 
-    // Bidirectional requirement: emit into both rooms.
-    // - customer room is always `order.userId`
-    // - rider room is current user id from socket auth; if socket/user mismatch, self-map still works via local setMyLocation.
-    const customerRoom = `user:${order.userId}`;
-    // Socket types don’t expose `data` on the client-side Socket type; emit to customer room
-    // and rely on local rendering for the rider’s own view.
-    const selfRoom = null;
-
-
-    const rooms = [customerRoom, selfRoom].filter(Boolean) as string[];
-
-    await Promise.all(
-      rooms.map((room) =>
-        axios.post(
-          `${realtimeService}/api/v1/internal/emit`,
-          {
-            event: "rider:location",
-            room,
-            payload: {
-              latitude,
-              longitude,
-              orderId: order._id,
-              updatedAt: Date.now(),
-            },
+    await axios
+      .post(
+        `${realtimeService}/api/v1/internal/emit`,
+        {
+          event: "rider:location_update",           // was "rider:location" — mismatch fixed
+          room: `order:${order._id}`,               // was "user:<userId>" — mismatch fixed
+          payload: {
+            lat: latitude,                          // was "latitude" — mismatch fixed
+            lng: longitude,                         // was "longitude" — mismatch fixed
+            orderId: order._id,
+            timestamp: Date.now(),
           },
-          {
-            headers: {
-              "x-internal-key": import.meta.env.VITE_INTERNAL_SERVICE_KEY,
-            },
-          }
-        )
+        },
+        {
+          headers: {
+            "x-internal-key": import.meta.env.VITE_INTERNAL_SERVICE_KEY,
+          },
+        }
       )
-    );
+      .catch((err) => console.error("Realtime emit failed:", err));
   };
 
   // Rider emits real browser geolocation while this map is mounted
@@ -128,30 +137,27 @@ const RiderOrderMap = ({ order }: RiderOrderMapProps) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order._id, order.userId, socket]);
 
-  // Rider map also listens to the relayed event so its rendering is driven by the same socket stream
+  // Also update local map when we receive our own broadcast back
   useEffect(() => {
     if (!socket || !order?._id) return;
 
-    const onLoc = ({ latitude, longitude, updatedAt }: any) => {
-      if (!latitude || !longitude) return;
-      setMyLocation([latitude, longitude]);
-      setLastUpdatedAt(updatedAt ?? Date.now());
+    const onLoc = ({ lat, lng, timestamp }: any) => {  // FIX: was latitude/longitude
+      if (!lat || !lng) return;
+      setMyLocation([lat, lng]);
+      setLastUpdatedAt(timestamp ?? Date.now());
     };
 
-    socket.on("rider:location", onLoc);
+    socket.on("rider:location_update", onLoc);        // FIX: was "rider:location"
     return () => {
-      socket.off("rider:location", onLoc);
+      socket.off("rider:location_update", onLoc);
     };
   }, [socket, order?._id]);
-
 
 
 
   const dest = order.deliveryAddress
     ? ([order.deliveryAddress.latitude, order.deliveryAddress.longitude] as [number, number])
     : null;
-
-
 
   const positions: [number, number][] = myLocation && dest ? [myLocation, dest] : [];
 
@@ -195,6 +201,7 @@ const RiderOrderMap = ({ order }: RiderOrderMapProps) => {
           maxZoom={19}
         />
         <FitBounds positions={positions} />
+        <MapUpdater position={myLocation} />
         <Marker position={myLocation} icon={riderIcon} />
         <Marker position={dest} icon={destIcon} />
         <Polyline
