@@ -7,6 +7,7 @@ import {
   getNearbyRestaurant,
   updateRestaurant,
   updateStatusRestaurant,
+  updateAadharRestaurant,
 } from "../controllers/restaraunt.js";
 import { aiSearch } from "../controllers/aiSearch.js";
 import { nearbyDiscovery } from "../controllers/nearbyDiscovery.js";
@@ -20,6 +21,7 @@ router.put("/status", isAuth, isSeller, updateStatusRestaurant);
 // FIXED BUG 2: alias route so frontend PATCH /api/restaurant/toggle/:id works
 router.patch("/toggle/:id", isAuth, isSeller, updateStatusRestaurant);
 router.put("/edit", isAuth, isSeller, uploadFile, updateRestaurant);
+router.put("/aadhar", isAuth, isSeller, updateAadharRestaurant);
 router.get("/all", isAuth, getNearbyRestaurant);
 
 // ── AI Smart Search ──────────────────────────────────────────────────────────

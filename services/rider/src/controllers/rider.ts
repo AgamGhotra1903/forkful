@@ -228,7 +228,9 @@ export const toggleRiderAvailablity = TryCatch(
     }
 
     if (isAvailable && !rider.isVerified) {
-      rider.isVerified = true;
+      return res.status(403).json({
+        message: "Cannot go online. Your profile has not been verified by an admin yet.",
+      });
     }
 
     rider.isAvailable = isAvailable;
@@ -247,6 +249,42 @@ export const toggleRiderAvailablity = TryCatch(
 
     res.json({
       message: isAvailable ? "Rider is now online" : "Rider is now offline",
+      rider,
+    });
+  }
+);
+
+export const updateAadharRider = TryCatch(
+  async (req: AuthenticatedRequest, res) => {
+    if (!req.user) {
+      return res.status(401).json({
+        message: "Please Login",
+      });
+    }
+
+    const { aadharNumber, aadharImage } = req.body;
+    if (!aadharNumber) {
+      return res.status(400).json({
+        message: "Aadhar number is required",
+      });
+    }
+
+    const rider = await Rider.findOne({ userId: req.user._id });
+    if (!rider) {
+      return res.status(404).json({
+        message: "Rider profile not found",
+      });
+    }
+
+    rider.aadharNumber = aadharNumber;
+    if (aadharImage) rider.aadharImage = aadharImage;
+    // Reset verification so admin reviews the updated info
+    rider.isVerified = false;
+    rider.isAvailable = false;
+    await rider.save();
+
+    res.json({
+      message: "Aadhar updated successfully. Please wait for admin manual verification.",
       rider,
     });
   }
@@ -575,11 +613,13 @@ export const updateRiderLocation = TryCatch(
         await axios.post(
           `${process.env.REALTIME_SERVICE}/api/v1/internal/emit`,
           {
-            event: "rider:location",
+            event: "rider:location_update",   // matches what OrderPage listens for
             room: `order:${orderId}`,
             payload: {
-              latitude,
-              longitude,
+              lat: latitude,                   // matches { lat, lng, orderId } shape
+              lng: longitude,
+              orderId,
+              timestamp: Date.now(),
             },
           },
           {

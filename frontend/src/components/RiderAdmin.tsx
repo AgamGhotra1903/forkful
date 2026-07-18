@@ -56,6 +56,21 @@ const RiderAdmin = ({ rider, onVerify }: RiderAdminProps) => {
           <p className="flex items-center gap-1.5"><BiCycling className="text-xs" style={{ color: "var(--color-route)" }} /> <span>Licence: {rider.drivingLicenseNumber || "—"}</span></p>
         </div>
 
+        {/* Aadhaar document photo */}
+        {rider.aadharImage && (
+          <div className="space-y-1">
+            <p className="text-[9px] font-mono tracking-wider uppercase font-bold text-slate-400">Aadhaar Document</p>
+            <a href={rider.aadharImage} target="_blank" rel="noreferrer" title="View full Aadhaar">
+              <img
+                src={rider.aadharImage}
+                alt="Aadhaar document"
+                className="w-full h-20 object-cover rounded-xl border cursor-pointer hover:opacity-80 transition-opacity"
+                style={{ borderColor: "var(--color-rule)" }}
+              />
+            </a>
+          </div>
+        )}
+
         <div className="flex gap-2">
           <button
             onClick={async () => {

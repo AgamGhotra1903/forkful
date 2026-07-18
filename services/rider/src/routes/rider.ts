@@ -14,12 +14,14 @@ import {
   markRiderBusyInternal,
   addRiderRatingInternal,
   getAvailableOrders,
+  updateAadharRider,
 } from "../controllers/rider.js";
 import uploadFile from "../middlewares/multer.js";
 
 const router = express.Router();
 
 router.post("/new", isAuth, uploadFile, addRiderProfile);
+router.put("/aadhar", isAuth, updateAadharRider);
 
 router.get("/myprofile", isAuth, fetchMyProfile);
 router.patch("/toggle", isAuth, toggleRiderAvailablity);

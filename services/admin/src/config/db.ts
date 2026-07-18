@@ -1,4 +1,8 @@
 import { MongoClient, Db } from "mongodb";
+import dns from "dns";
+
+// ISP DNS may block *.mongodb.net SRV records — force Cloudflare + Google DNS
+dns.setServers(["1.1.1.1", "8.8.8.8"]);
 
 let client: MongoClient;
 let db: Db;

@@ -17,7 +17,7 @@ interface SocketContextType {
 const SocketContext = createContext<SocketContextType>({ socket: null, isConnected: false });
 
 export const SocketProvider = ({ children }: { children: ReactNode }) => {
-  const { isAuth } = useAppData();
+  const { isAuth, user } = useAppData();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -92,7 +92,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       setSocket(null);
       setIsConnected(false);
     };
-  }, [isAuth]);
+  }, [isAuth, user?._id, user?.role]);
 
   return (
     <SocketContext.Provider value={{ socket, isConnected }}>

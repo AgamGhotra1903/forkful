@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -14,11 +14,31 @@ interface UserOrderMapProps {
 
 const FitBoundsUser = ({ positions }: { positions: L.LatLngExpression[] }) => {
   const map = useMap();
+  const lastKeyRef = useRef("");
   useEffect(() => {
-    if (positions.length >= 2) {
-      map.fitBounds(positions as L.LatLngBoundsExpression, { padding: [80, 80], maxZoom: 16 });
-    }
+    if (positions.length < 2) return;
+    const key = JSON.stringify(positions);
+    if (key === lastKeyRef.current) return; // only refit when values actually change
+    lastKeyRef.current = key;
+    map.fitBounds(positions as L.LatLngBoundsExpression, { padding: [80, 80], maxZoom: 16 });
   }, [positions, map]);
+  return null;
+};
+
+// Smoothly follows the rider marker so it's always visible
+const MapUpdater = ({ position }: { position: { lat: number; lng: number } | undefined }) => {
+  const map = useMap();
+  const prevRef = useRef<{ lat: number; lng: number } | null>(null);
+  useEffect(() => {
+    if (!position) return;
+    const pos: [number, number] = [position.lat, position.lng];
+    if (!prevRef.current) {
+      map.setView(pos, map.getZoom());
+    } else {
+      map.flyTo(pos, map.getZoom(), { animate: true, duration: 1.2 });
+    }
+    prevRef.current = position;
+  }, [position, map]);
   return null;
 };
 
@@ -186,6 +206,7 @@ const UserOrderMap: React.FC<UserOrderMapProps> = ({
       )}
 
       <FitBoundsUser positions={positions} />
+      <MapUpdater position={riderLocation} />
     </MapContainer>
   );
 };

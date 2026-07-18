@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import axios from 'axios';
+import { riderService } from '../main';
 
 interface RiderLiveMapProps {
   orderId: string;
@@ -13,10 +15,13 @@ interface RiderLiveMapProps {
 
 const FitBounds = ({ positions }: { positions: L.LatLngExpression[] }) => {
   const map = useMap();
+  const lastKeyRef = React.useRef("");
   useEffect(() => {
-    if (positions.length >= 2) {
-      map.fitBounds(positions as L.LatLngBoundsExpression, { padding: [80, 80], maxZoom: 16 });
-    }
+    if (positions.length < 2) return;
+    const key = JSON.stringify(positions);
+    if (key === lastKeyRef.current) return; // only refit when values actually change
+    lastKeyRef.current = key;
+    map.fitBounds(positions as L.LatLngBoundsExpression, { padding: [80, 80], maxZoom: 16 });
   }, [positions, map]);
   return null;
 };
@@ -90,6 +95,24 @@ const RiderLiveMap: React.FC<RiderLiveMapProps> = ({ orderId, restaurantLocation
     }
   };
 
+  // REST + Socket Location Emitter
+  const emitLocation = async (latitude: number, longitude: number) => {
+    // 1. Persist in database via rider service REST API
+    const token = localStorage.getItem("token");
+    if (token) {
+      axios
+        .put(
+          `${riderService}/api/rider/location`,
+          { latitude, longitude },
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+        .catch((err) => console.error("Failed to update rider location in DB:", err.message));
+    }
+
+    // 2. Relay via Socket.io for immediate customer map tracking updates
+    socket?.emit('rider:update_location', { lat: latitude, lng: longitude, orderId });
+  };
+
   // GPS tracking
   useEffect(() => {
     const updateLocation = () => {
@@ -97,7 +120,7 @@ const RiderLiveMap: React.FC<RiderLiveMapProps> = ({ orderId, restaurantLocation
         (pos) => {
           const { latitude, longitude } = pos.coords;
           setRiderPosition([latitude, longitude]);
-          socket?.emit('rider:update_location', { lat: latitude, lng: longitude, orderId });
+          emitLocation(latitude, longitude);
         },
         (err) => console.warn('Geolocation error:', err),
         { enableHighAccuracy: true, timeout: 10000 }
@@ -105,15 +128,20 @@ const RiderLiveMap: React.FC<RiderLiveMapProps> = ({ orderId, restaurantLocation
     };
 
     updateLocation();
+    
+    // watchPosition updates local state immediately so rider sees marker moving in realtime
     watchIdRef.current = navigator.geolocation.watchPosition((pos) => {
       const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
       setRiderPosition(coords);
+      // We also do a quick socket emit to update the customer without hitting DB on every tiny watch update
       socket?.emit('rider:update_location', {
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
         orderId,
       });
     });
+
+    // Periodic 10s poll updates DB/REST layer
     const intervalId = setInterval(updateLocation, 10000);
 
     return () => {
@@ -133,7 +161,7 @@ const RiderLiveMap: React.FC<RiderLiveMapProps> = ({ orderId, restaurantLocation
     }
   }, [riderPosition, orderStatus, restaurantLocation, customerLocation]);
 
-  // Socket listener for customer view (if needed)
+  // Socket listener for updates
   useEffect(() => {
     socket?.emit('chat:join_order', orderId);
     socket?.on('rider:location_update', (data: { lat: number; lng: number; orderId: string }) => {

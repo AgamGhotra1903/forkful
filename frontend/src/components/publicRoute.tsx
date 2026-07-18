@@ -1,6 +1,10 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { useAppData } from "../context/AppContext";
 
+/**
+ * PublicRoute — only renders children for unauthenticated users.
+ * If already logged in, redirects to the home feed ("/").
+ */
 const PublicRoute = () => {
   const { isAuth, loading } = useAppData();
 

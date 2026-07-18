@@ -7,6 +7,8 @@ export interface IRestaurant extends Document {
   ownerId: string;
   phone: number;
   isVerified: boolean;
+  aadharNumber: string;
+  aadharImage?: string;
 
   autoLocation: {
     type: "Point";
@@ -45,6 +47,14 @@ const schema = new Schema<IRestaurant>(
     isVerified: {
       type: Boolean,
       required: true,
+    },
+    aadharNumber: {
+      type: String,
+      default: "",
+    },
+    aadharImage: {
+      type: String,
+      default: "",
     },
 
     autoLocation: {

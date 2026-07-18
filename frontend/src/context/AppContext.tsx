@@ -96,11 +96,11 @@ export const AppProvider = ({ children }: AppProviderProps) => {
   useEffect(() => {
     if (!navigator.geolocation) {
       setLocation({
-        latitude: 28.6139,
-        longitude: 77.2090,
-        formattedAddress: "Connaught Place, New Delhi",
+        latitude: 25.4299625,
+        longitude: 81.7721885,
+        formattedAddress: "IIIT Allahabad, Prayagraj, Uttar Pradesh",
       });
-      setCity("New Delhi");
+      setCity("Prayagraj");
       setLoadingLocation(false);
       return;
     }
@@ -140,13 +140,13 @@ export const AppProvider = ({ children }: AppProviderProps) => {
         }
       },
       (error) => {
-        console.warn("Geolocation failed or blocked, using New Delhi fallback:", error);
+        console.warn("Geolocation failed or blocked, using Prayagraj fallback:", error);
         setLocation({
-          latitude: 28.6139,
-          longitude: 77.2090,
-          formattedAddress: "Connaught Place, New Delhi",
+          latitude: 25.4299625,
+          longitude: 81.7721885,
+          formattedAddress: "IIIT Allahabad, Prayagraj, Uttar Pradesh",
         });
-        setCity("New Delhi");
+        setCity("Prayagraj");
         setLoadingLocation(false);
       },
       { timeout: 8000 }

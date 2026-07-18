@@ -4,6 +4,9 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import ForkfulLogo from "./components/ForkfulLogo";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
+import AdminLogin from "./pages/AdminLogin";
+import DevLogin from "./pages/DevLogin";
+import Landing from "./pages/Landing";
 import ProtectedRoute from "./components/protectedRote";
 import PublicRoute from "./components/publicRoute";
 import SelectRole from "./pages/SelectRole";
@@ -29,7 +32,10 @@ import { CommandPalette } from "./components/CommandPalette";
 import AIAssistant from "./components/AIAssistant";
 import GlobalFooter from "./components/GlobalFooter";
 import MobileBottomNav from "./components/MobileBottomNav";
+import AadhaarBanner from "./components/AadhaarBanner";
 
+// Pages that manage their own full layout — no shared Navbar / GlobalFooter
+const STANDALONE_PATHS = ["/landing", "/login", "/admin/login", "/dev/login"];
 
 const PageWrapper = ({ children }: { children: React.ReactNode }) => {
   const shouldReduceMotion = useReducedMotion();
@@ -51,14 +57,36 @@ const PageWrapper = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-const AnimatedRoutes = () => {
+// ── Role-aware app shell ─────────────────────────────────────────────────────
+// Only renders for authenticated users navigating within the app.
+// Role-specific dashboards (seller/rider/admin) are shown here.
+// Regular customers get Navbar + AnimatedRoutes.
+const AppShell = () => {
+  const { user } = useAppData();
+  const location = useLocation();
+  const isAccountPage = location.pathname === "/account";
+
+  if (user && user.role === "seller" && !isAccountPage) return <Restaurant />;
+  if (user && user.role === "rider" && !isAccountPage) return <RiderDashboard />;
+  if (user && user.role === "admin" && !isAccountPage) return <Admin />;
+
+  return (
+    <>
+      <AadhaarBanner />
+      <Navbar />
+      <CustomerRoutes />
+      <AIAssistant />
+      <MobileBottomNav />
+    </>
+  );
+};
+
+// ── Customer page routes (all protected) ────────────────────────────────────
+const CustomerRoutes = () => {
   const location = useLocation();
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
-        <Route element={<PublicRoute />}>
-          <Route path="/login" element={<PageWrapper><Login /></PageWrapper>} />
-        </Route>
         <Route element={<ProtectedRoute />}>
           <Route path="/" element={<PageWrapper><Home /></PageWrapper>} />
           <Route path="/paymentsuccess/:paymentId" element={<PageWrapper><PaymentSuccess /></PageWrapper>} />
@@ -80,6 +108,39 @@ const AnimatedRoutes = () => {
   );
 };
 
+// ── Root router — handles ALL paths ─────────────────────────────────────────
+// Standalone pages (Landing, Login, AdminLogin) are matched first and render
+// their own complete layout — no Navbar, no GlobalFooter injected here.
+// Everything else flows through AppShell.
+const RootRouter = () => {
+  const location = useLocation();
+  const isStandalone = STANDALONE_PATHS.some((p) => location.pathname === p);
+
+  return (
+    <>
+      {/* Standalone full-page routes — own layout, no shared chrome */}
+      <Routes location={location}>
+        {/* Landing: always visible regardless of auth */}
+        <Route path="/landing" element={<Landing />} />
+        {/* Dev login: always accessible — developers may want to switch accounts */}
+        <Route path="/dev/login" element={<DevLogin />} />
+        {/* Auth pages: redirect away if already logged in */}
+        <Route element={<PublicRoute />}>
+          <Route path="/login" element={<Login />} />
+          <Route path="/admin/login" element={<AdminLogin />} />
+        </Route>
+      </Routes>
+
+      {/* App shell — only renders when NOT on a standalone page */}
+      {!isStandalone && <AppShell />}
+
+      {/* Global footer — only on app pages, not standalone */}
+      {!isStandalone && <GlobalFooter />}
+    </>
+  );
+};
+
+// ── App ──────────────────────────────────────────────────────────────────────
 const App = () => {
   const { user, loading } = useAppData();
   const { socket } = useSocket();
@@ -87,7 +148,7 @@ const App = () => {
   const [showOnlineStatus, setShowOnlineStatus] = useState(false);
   const [announcement, setAnnouncement] = useState<string | null>(null);
 
-  // Admin broadcast announcements
+  // Admin broadcast announcements via WebSocket
   useEffect(() => {
     if (!socket) return;
     const onBroadcast = ({ message }: { message: string }) => {
@@ -103,7 +164,7 @@ const App = () => {
     if (params.get("clear") === "true") {
       localStorage.clear();
       sessionStorage.clear();
-      window.location.href = "/login";
+      window.location.href = "/landing";
     }
   }, []);
 
@@ -131,12 +192,12 @@ const App = () => {
     return (
       <div
         className="flex h-screen w-screen items-center justify-center"
-        style={{ backgroundColor: "#0A0A0B" }}
+        style={{ backgroundColor: "var(--bg-base)" }}
       >
         <div className="flex flex-col items-center gap-3">
-          <ForkfulLogo size={56} dark={true} />
+          <ForkfulLogo size={56} dark mono />
           <span style={{ fontFamily: "var(--font-display, system-ui)", fontWeight: 800, letterSpacing: "-0.04em", fontSize: "1.25rem", lineHeight: 1 }}>
-            <span style={{ color: "#F0EEE9" }}>Fork</span>
+            <span style={{ color: "var(--color-ink)" }}>Fork</span>
             <span style={{
               color: "#FF6B45",
               textShadow: "0 0 20px rgba(255, 107, 69, 0.4)"
@@ -150,10 +211,9 @@ const App = () => {
 
   return (
     <BrowserRouter>
-      {/* Global Elements */}
+      {/* Global overlays (announcements, offline banner) — always on top */}
       <CommandPalette />
-      
-      {/* Admin Broadcast Announcement */}
+
       {announcement && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] w-full max-w-sm px-4 animate-fade-in" role="alert" aria-live="assertive">
           <div className="flex items-start gap-3 px-4 py-3 rounded-2xl border border-purple-500/30 bg-purple-500/15 backdrop-blur-md shadow-xl">
@@ -174,7 +234,7 @@ const App = () => {
           </div>
         </div>
       )}
-      {/* Offline Banner */}
+
       {isOffline && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] w-full max-w-sm px-4 animate-bounce">
           <div className="flex items-center gap-3 px-4 py-3 rounded-2xl border border-red-500/20 bg-red-500/10 backdrop-blur-md text-red-500 text-xs font-bold shadow-lg">
@@ -192,25 +252,8 @@ const App = () => {
         </div>
       )}
 
-      {/* Role-based dashboard or routing paths */}
-      {user && user.role === "seller" ? (
-        <Restaurant />
-      ) : user && user.role === "rider" ? (
-        <RiderDashboard />
-      ) : user && user.role === "admin" ? (
-        <Admin />
-      ) : (
-        <>
-          <Navbar />
-          <AnimatedRoutes />
-          {/* AI Support floating widget — appears on all authenticated pages */}
-          <AIAssistant />
-          {/* Persistent mobile tab bar — standard food-delivery-app navigation */}
-          <MobileBottomNav />
-        </>
-      )}
-      {/* Global footer — visible on every page */}
-      <GlobalFooter />
+      {/* Main routing */}
+      <RootRouter />
     </BrowserRouter>
   );
 };

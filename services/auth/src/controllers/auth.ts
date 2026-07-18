@@ -79,11 +79,11 @@ const generateAndSendOtp = async (cleanEmail: string): Promise<{ emailSent: bool
 };
 
 export const loginUser = TryCatch(async (req, res) => {
-  const { code, id_token } = req.body;
+  const { code, id_token, access_token } = req.body;
 
-  if (!code && !id_token) {
+  if (!code && !id_token && !access_token) {
     return res.status(400).json({
-      message: "Authorization code or id_token is required",
+      message: "Authorization code, id_token, or access_token is required",
     });
   }
 
@@ -104,6 +104,19 @@ export const loginUser = TryCatch(async (req, res) => {
     } catch (err: any) {
       console.error("Google token exchange failed:", err?.response?.data || err.message || err);
       return res.status(400).json({ message: "Google token exchange failed" });
+    }
+  } else if (access_token) {
+    // Implicit flow — access_token returned directly from @react-oauth/google
+    try {
+      const userRes = await axios.get(
+        `https://www.googleapis.com/oauth2/v1/userinfo?alt=json&access_token=${access_token}`
+      );
+      googleEmail = userRes.data.email;
+      googleName  = userRes.data.name;
+      picture     = userRes.data.picture;
+    } catch (err: any) {
+      console.error("Google userinfo fetch failed:", err?.response?.data || err.message || err);
+      return res.status(400).json({ message: "Google sign in failed" });
     }
   } else if (id_token) {
     if (!process.env.GOOGLE_CLIENT_ID) {

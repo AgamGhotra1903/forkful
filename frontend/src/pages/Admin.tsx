@@ -355,6 +355,8 @@ const Admin = () => {
                     <tr className="border-b text-[10px] font-mono tracking-widest uppercase font-bold text-slate-400" style={{ borderColor: "var(--color-rule)" }}>
                       <th className="p-4">Photo</th>
                       <th className="p-4">Name</th>
+                      <th className="p-4">Aadhar No.</th>
+                      <th className="p-4">Aadhar Doc</th>
                       <th className="p-4">Location</th>
                       <th className="p-4">Date</th>
                       <th className="p-4">Status</th>
@@ -373,8 +375,23 @@ const Admin = () => {
                           />
                         </td>
                         <td className="p-4 font-bold" style={{ color: "var(--color-ink)" }}>{r.name}</td>
+                        <td className="p-4 font-mono font-bold text-orange-500">{r.aadharNumber || "Not Uploaded"}</td>
+                        <td className="p-4">
+                          {r.aadharImage ? (
+                            <a href={r.aadharImage} target="_blank" rel="noreferrer" title="View Aadhaar document">
+                              <img
+                                src={r.aadharImage}
+                                alt="Aadhaar doc"
+                                className="w-14 h-10 object-cover rounded-lg border cursor-pointer hover:opacity-80 transition-opacity"
+                                style={{ borderColor: "var(--color-route)" }}
+                              />
+                            </a>
+                          ) : (
+                            <span className="text-[10px] font-mono text-slate-500">Not uploaded</span>
+                          )}
+                        </td>
                         <td className="p-4 font-mono" style={{ color: "var(--color-manifest)" }}>{r.autoLocation?.formattedAddress || "Near Hotzone"}</td>
-                        <td className="p-4 font-mono" style={{ color: "var(--color-ghost)" }}>2026-06-20</td>
+                        <td className="p-4 font-mono" style={{ color: "var(--color-ghost)" }}>{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "2026-06-20"}</td>
                         <td className="p-4"><span className="px-2 py-0.5 rounded-full text-[9px] font-bold font-mono tracking-wide bg-orange-100 dark:bg-orange-950/40 text-orange-600 border border-orange-200">Pending</span></td>
                         <td className="p-4 flex items-center justify-center gap-2">
                           <button

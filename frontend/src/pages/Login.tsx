@@ -1,55 +1,152 @@
+/**
+ * Login.tsx — Customer-facing auth page
+ *
+ * Layout: split panel on desktop (pan animation left, form right),
+ * stacked on mobile (form only, pan above as compact brand touch).
+ *
+ * Dev bypass logic → /dev/login
+ * Admin portal    → /admin/login
+ */
+
 import axios from "axios";
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { authService } from "../main";
 import toast from "react-hot-toast";
 import { useGoogleLogin } from "@react-oauth/google";
 import { useAppData } from "../context/AppContext";
-import { BiUser, BiCycling, BiStore, BiShield } from "react-icons/bi";
-import { motion } from "framer-motion";
-import ForkfulLogo from "../components/ForkfulLogo";
-import { AuthDecorativePanel } from "../components/auth/AuthDecorativePanel";
-import { FloatingLabelInput } from "../components/auth/FloatingLabelInput";
-import { GoogleOAuthButton } from "../components/auth/GoogleOAuthButton";
+import { motion, AnimatePresence } from "framer-motion";
 import { OtpInput } from "../components/auth/OtpInput";
+import { AuthDecorativePanel } from "../components/auth/AuthDecorativePanel";
+import ForkfulLogo from "../components/ForkfulLogo";
 
-const BYPASS_PROFILES = [
-  { email: "customer@tomato.com", name: "Test Customer", role: "customer", label: "Customer", color: "#2563EB", bg: "#EFF6FF" },
-  { email: "arjun.rider@forkful.dev", name: "Arjun Singh", role: "rider", label: "Rider", color: "#059669", bg: "#ECFDF5" },
-  { email: "spicegarden@forkful.dev", name: "Spice Garden", role: "seller", label: "Seller", color: "#D97706", bg: "#FFFBEB" },
-  { email: "admin@tomato.com", name: "Support Admin", role: "admin", label: "Admin", color: "#7C3AED", bg: "#F5F3FF" },
-] as const;
 
-// ── Animation variants ──────────────────────────────────────────────────────
-const cardVariants = {
-  hidden: { opacity: 0, y: 40 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
+// ── Form primitives ──────────────────────────────────────────────────────────
+const inputStyle = (focused: boolean): React.CSSProperties => ({
+  width: "100%",
+  height: "46px",
+  padding: "0 40px 0 14px",
+  fontSize: "0.875rem",
+  fontFamily: "var(--font-body)",
+  color: "var(--color-ink)",
+  background: focused ? "var(--bg-surface-2, rgba(255,255,255,0.06))" : "var(--bg-surface-2, rgba(0,0,0,0.03))",
+  border: `1.5px solid ${focused ? "#FF5733" : "var(--color-rule)"}`,
+  borderRadius: "7px",
+  outline: "none",
+  transition: "border-color 0.18s, background 0.18s, box-shadow 0.18s",
+  boxShadow: focused ? "0 0 0 3px rgba(255,87,51,0.10)" : "none",
+  boxSizing: "border-box" as const,
+});
+
+interface AuthFieldProps {
+  id: string; label: string; type?: string; value: string;
+  onChange: (v: string) => void; autoComplete?: string; required?: boolean; hint?: string;
+}
+
+const AuthField = ({ id, label, type = "text", value, onChange, autoComplete, required, hint }: AuthFieldProps) => {
+  const [focused, setFocused] = useState(false);
+  const [showPw, setShowPw] = useState(false);
+  const isPw = type === "password";
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+      <label htmlFor={id} style={{ fontSize: "0.76rem", fontWeight: 600, color: "var(--color-manifest)", letterSpacing: "0.01em" }}>
+        {label}
+      </label>
+      <div style={{ position: "relative" }}>
+        <input
+          id={id}
+          type={isPw && !showPw ? "password" : "text"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          autoComplete={autoComplete}
+          required={required}
+          style={{ ...inputStyle(focused), paddingRight: isPw ? "44px" : "14px" }}
+        />
+        {isPw && (
+          <button type="button" tabIndex={-1} onClick={() => setShowPw(p => !p)}
+            aria-label={showPw ? "Hide" : "Show"}
+            style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "var(--color-ghost)", background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
+            {showPw
+              ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>}
+          </button>
+        )}
+      </div>
+      {hint && <p style={{ fontSize: "0.7rem", color: "var(--color-ghost)", margin: 0 }}>{hint}</p>}
+    </div>
+  );
 };
 
-const containerVariants = {
-  hidden: {},
-  visible: { transition: { staggerChildren: 0.07 } },
-};
+const PrimaryBtn = ({ children, loading, disabled, onClick }: {
+  children: React.ReactNode; loading?: boolean; disabled?: boolean; onClick?: () => void;
+}) => (
+  <motion.button
+    type={onClick ? "button" : "submit"}
+    onClick={onClick}
+    disabled={loading || disabled}
+    whileHover={!loading && !disabled ? { scale: 1.015, boxShadow: "0 6px 22px rgba(255,87,51,0.35)" } : {}}
+    whileTap={!loading && !disabled ? { scale: 0.98 } : {}}
+    transition={{ duration: 0.14 }}
+    style={{
+      width: "100%", height: "46px", fontSize: "0.875rem", fontWeight: 700,
+      fontFamily: "var(--font-body)", color: "#fff",
+      background: loading || disabled ? "rgba(255,87,51,0.4)" : "#FF5733",
+      border: "none", borderRadius: "7px",
+      cursor: loading || disabled ? "not-allowed" : "pointer",
+      letterSpacing: "-0.01em",
+      boxShadow: loading || disabled ? "none" : "0 4px 16px rgba(255,87,51,0.22)",
+      display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+    }}
+  >
+    {loading
+      ? <><div style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />{children}</>
+      : children}
+  </motion.button>
+);
 
-const itemVariants = {
-  hidden: { opacity: 0, y: 16 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.35 } },
-};
+const Divider = ({ label }: { label: string }) => (
+  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+    <div style={{ flex: 1, height: 1, background: "var(--color-rule)" }} />
+    <span style={{ fontSize: "0.68rem", fontFamily: "var(--font-mono)", color: "var(--color-ghost)", letterSpacing: "0.08em", textTransform: "uppercase" }}>{label}</span>
+    <div style={{ flex: 1, height: 1, background: "var(--color-rule)" }} />
+  </div>
+);
 
-// ─────────────────────────────────────────────────────────────────────────────
+const GoogleBtn = ({ onClick, loading }: { onClick: () => void; loading: boolean }) => (
+  <motion.button type="button" onClick={onClick} disabled={loading}
+    whileHover={!loading ? { borderColor: "var(--color-ghost)" } : {}}
+    style={{ width: "100%", height: "44px", display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+      fontSize: "0.84rem", fontWeight: 600, fontFamily: "var(--font-body)", color: "var(--color-ink)",
+      background: "var(--bg-surface)", border: "1.5px solid var(--color-rule)", borderRadius: "7px", cursor: "pointer",
+      transition: "border-color 0.18s" }}>
+    <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+    </svg>
+    Continue with Google
+  </motion.button>
+);
+
+// ── Main component ───────────────────────────────────────────────────────────
 const Login = () => {
-  const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"signin" | "signup">("signin");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [mobileNumber, setMobileNumber] = useState("");
-  const [authorityCode, setAuthorityCode] = useState("");
-
-  // ── Email OTP verification step ──
+  const [tab, setTab] = useState<"signin" | "signup">("signin");
   const [authStep, setAuthStep] = useState<"form" | "otp">("form");
+  const [loading, setLoading] = useState(false);
+
+  const [siEmail, setSiEmail] = useState("");
+  const [siPassword, setSiPassword] = useState("");
+
+  const [suFirst, setSuFirst] = useState("");
+  const [suLast, setSuLast] = useState("");
+  const [suMobile, setSuMobile] = useState("");
+  const [suEmail, setSuEmail] = useState("");
+  const [suPw, setSuPw] = useState("");
+  const [suConfirm, setSuConfirm] = useState("");
+
   const [otpEmail, setOtpEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [otpVerifying, setOtpVerifying] = useState(false);
@@ -57,702 +154,280 @@ const Login = () => {
 
   const navigate = useNavigate();
   const { setUser, setIsAuth } = useAppData();
-
-  const passwordsMatch = confirmPassword.length === 0 || confirmPassword === password;
+  const pwMatch = suConfirm.length === 0 || suConfirm === suPw;
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
-    const timer = setTimeout(() => setResendCooldown((c) => c - 1), 1000);
-    return () => clearTimeout(timer);
+    const t = setTimeout(() => setResendCooldown(c => c - 1), 1000);
+    return () => clearTimeout(t);
   }, [resendCooldown]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password.trim()) return;
-
     setLoading(true);
     try {
-      const result = await axios.post(`${authService}/api/auth/login-password`, {
-        email: email.trim(),
-        password: password.trim(),
-      });
-      localStorage.setItem("token", result.data.token);
-      setUser(result.data.user);
-      setIsAuth(true);
-      toast.success("Signed in successfully!");
+      const { data } = await axios.post(`${authService}/api/auth/login-password`, { email: siEmail.trim(), password: siPassword.trim() });
+      localStorage.setItem("token", data.token);
+      setUser(data.user); setIsAuth(true);
       navigate("/");
     } catch (err: any) {
       if (err.response?.data?.requiresVerification) {
-        setOtpEmail(email.trim());
-        setOtp("");
-        setAuthStep("otp");
-        setResendCooldown(30);
-        toast(err.response.data.message || "Please verify your email first.", { icon: "✉️" });
-      } else {
-        toast.error(err.response?.data?.message || "Invalid email or password.");
-      }
-    } finally {
-      setLoading(false);
-    }
+        setOtpEmail(siEmail.trim()); setOtp(""); setAuthStep("otp"); setResendCooldown(30);
+        toast("Check your inbox for a 6-digit code.", { icon: "✉️" });
+      } else { toast.error(err.response?.data?.message || "Invalid email or password."); }
+    } finally { setLoading(false); }
   };
 
-  const handleRegister = async (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password.trim() || !firstName.trim() || !lastName.trim() || !mobileNumber.trim()) {
-      toast.error("Please fill in all required fields.");
-      return;
-    }
-    if (password.length < 8) {
-      toast.error("Password must be at least 8 characters long.");
-      return;
-    }
-    if (password !== confirmPassword) {
-      toast.error("Passwords do not match.");
-      return;
-    }
-
+    if (!suFirst.trim() || !suLast.trim() || !suMobile.trim() || !suEmail.trim() || !suPw.trim()) { toast.error("Please fill in all fields."); return; }
+    if (suPw.length < 8) { toast.error("Password must be at least 8 characters."); return; }
+    if (suPw !== suConfirm) { toast.error("Passwords don't match."); return; }
     setLoading(true);
     try {
-      const result = await axios.post(`${authService}/api/auth/register-password`, {
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        mobileNumber: mobileNumber.trim(),
-        email: email.trim(),
-        password: password.trim(),
-        confirmPassword: confirmPassword.trim(),
-        authorityCode: authorityCode.trim() || undefined,
+      const { data } = await axios.post(`${authService}/api/auth/register-password`, {
+        firstName: suFirst.trim(), lastName: suLast.trim(), mobileNumber: suMobile.trim(),
+        email: suEmail.trim(), password: suPw.trim(), confirmPassword: suConfirm.trim(),
       });
-
-      if (result.data.requiresVerification) {
-        setOtpEmail(email.trim());
-        setOtp("");
-        setAuthStep("otp");
-        setResendCooldown(30);
-        toast.success("Check your inbox for a 6-digit verification code!");
+      if (data.requiresVerification) {
+        setOtpEmail(suEmail.trim()); setOtp(""); setAuthStep("otp"); setResendCooldown(30);
+        toast.success("Check your inbox for a 6-digit verification code.");
       }
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Registration failed. Try again.");
-    } finally {
-      setLoading(false);
-    }
+    } catch (err: any) { toast.error(err.response?.data?.message || "Registration failed."); }
+    finally { setLoading(false); }
   };
 
   const handleVerifyOtp = async (code?: string) => {
-    const codeToUse = (code ?? otp).trim();
-    if (codeToUse.length !== 6) {
-      toast.error("Enter the full 6-digit code.");
-      return;
-    }
+    const c = (code ?? otp).trim();
+    if (c.length !== 6) { toast.error("Enter the full 6-digit code."); return; }
     setOtpVerifying(true);
     try {
-      const result = await axios.post(`${authService}/api/auth/verify-otp`, {
-        email: otpEmail,
-        otp: codeToUse,
-      });
-      localStorage.setItem("token", result.data.token);
-      setUser(result.data.user);
-      setIsAuth(true);
-      toast.success(result.data.message || "Verified! Welcome to Forkful.");
+      const { data } = await axios.post(`${authService}/api/auth/verify-otp`, { email: otpEmail, otp: c });
+      localStorage.setItem("token", data.token);
+      setUser(data.user); setIsAuth(true);
       navigate("/");
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Invalid or expired code.");
-      setOtp("");
-    } finally {
-      setOtpVerifying(false);
-    }
+    } catch (err: any) { toast.error(err.response?.data?.message || "Invalid or expired code."); setOtp(""); }
+    finally { setOtpVerifying(false); }
   };
 
   const handleResendOtp = async () => {
     if (resendCooldown > 0) return;
     setLoading(true);
     try {
-      await axios.post(`${authService}/api/auth/send-otp`, {
-        email: otpEmail,
-        mode: "signup",
-      });
-      toast.success("A fresh code is on its way!");
-      setResendCooldown(30);
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Couldn't resend the code. Try again shortly.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleBackToForm = () => {
-    setAuthStep("form");
-    setOtp("");
-  };
-
-  const handleBypassAuth = async (payload: { email: string; name: string; role: string }) => {
-    setLoading(true);
-    try {
-      const result = await axios.post(`${authService}/api/auth/dev-login`, payload);
-      localStorage.setItem("token", result.data.token);
-      setUser(result.data.user);
-      setIsAuth(true);
-      toast.success(`Logged in as ${payload.name}!`);
-      navigate("/");
-    } catch {
-      toast.error("Bypass login failed.");
-    } finally {
-      setLoading(false);
-    }
+      await axios.post(`${authService}/api/auth/send-otp`, { email: otpEmail, mode: "signup" });
+      toast.success("New code sent."); setResendCooldown(30);
+    } catch (err: any) { toast.error(err.response?.data?.message || "Couldn't resend."); }
+    finally { setLoading(false); }
   };
 
   const handleGoogleAuth = async (payload: Record<string, string>) => {
     setLoading(true);
     try {
-      const result = await axios.post(`${authService}/api/auth/login`, payload);
-      localStorage.setItem("token", result.data.token);
-      setUser(result.data.user);
-      setIsAuth(true);
-      toast.success("Signed in successfully!");
-      navigate("/");
-    } catch {
-      toast.error("Sign in failed. Try again.");
-    } finally {
-      setLoading(false);
-    }
+      const { data } = await axios.post(`${authService}/api/auth/login`, payload);
+      localStorage.setItem("token", data.token);
+      setUser(data.user); setIsAuth(true); navigate("/");
+    } catch { toast.error("Google sign in failed."); }
+    finally { setLoading(false); }
   };
 
   const googleLogin = useGoogleLogin({
-    onSuccess: (r) => {
-      const rr: any = r;
-      if (rr.code) {
-        handleGoogleAuth({ code: rr.code });
-      } else if (rr.credential) {
-        handleGoogleAuth({ id_token: rr.credential });
-      } else {
-        toast.error("Google sign in failed: missing credential");
-      }
+    onSuccess: (r: any) => {
+      // Implicit/token flow: r.access_token is returned directly.
+      // The backend /api/auth/login accepts { access_token } and fetches
+      // user info from Google's userinfo endpoint.
+      if (r.access_token) handleGoogleAuth({ access_token: r.access_token });
+      else toast.error("Google sign in failed.");
     },
-    onError: () => toast.error("Google sign in failed"),
-    flow: "auth-code",
+    onError: (err) => {
+      console.error("Google OAuth error:", err);
+      toast.error("Google sign in failed.");
+    },
   });
 
-  // ── JSX ────────────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div
-      className="min-h-screen flex"
-      style={{ backgroundColor: "var(--bg-base)" }}
-    >
-      {/* ── Left decorative panel (desktop only) ── */}
-      <AuthDecorativePanel />
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "stretch", backgroundColor: "var(--bg-base)" }}>
 
-      {/* ── Right: auth form ── */}
-      <div className="flex-1 flex items-center justify-center px-4 sm:px-8 py-10 relative overflow-hidden">
+      {/* Left panel — original pan animation — exactly half the viewport */}
+      <div className="login-left-panel" style={{ flex: "0 0 50%", maxWidth: "50%" }}>
+        <AuthDecorativePanel />
+      </div>
 
-        {/* Subtle background ambient blobs */}
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(ellipse 60% 55% at 80% 10%, rgba(255,87,51,0.07) 0%, transparent 70%)," +
-              "radial-gradient(ellipse 50% 45% at 20% 90%, rgba(255,130,77,0.05) 0%, transparent 70%)",
-          }}
-        />
+      {/* Right panel — form */}
+      <div className="login-right-panel" style={{
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "40px 32px",
+        boxSizing: "border-box",
+        overflowY: "auto",
+      }}>
 
-        {/* ── Animated card ── */}
+        {/* Mobile logo (hidden on desktop) */}
+        <div className="login-mobile-logo">
+          <Link to="/landing" style={{ display: "flex", alignItems: "center", gap: 9, textDecoration: "none", marginBottom: 24 }}>
+            <ForkfulLogo bare size={28} />
+            <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "1.05rem", letterSpacing: "-0.04em", color: "var(--color-ink)" }}>Forkful</span>
+          </Link>
+        </div>
+
         <motion.div
-          variants={cardVariants}
-          initial="hidden"
-          animate="visible"
-          className="relative w-full max-w-[440px]"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+          style={{ width: "100%", maxWidth: 400 }}
         >
-          <motion.div
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-            className="glass-card p-8 sm:p-10 rounded-3xl space-y-6"
-          >
-            {/* ── App logo & headline ── */}
-            <motion.div variants={itemVariants}>
-              <div className="flex items-center gap-2.5 mb-5">
-                <ForkfulLogo size={42} dark={true} />
-                <span style={{
-                  fontFamily: "var(--font-display, system-ui)",
-                  fontWeight: 800,
-                  letterSpacing: "-0.04em",
-                  fontSize: "1.35rem",
-                  lineHeight: 1
-                }}>
-                  <span style={{ color: "#FFFFFF" }}>Fork</span>
-                  <span style={{
-                    color: "#FF6B45",
-                    textShadow: "0 0 24px rgba(255, 107, 69, 0.5)"
-                  }}>ful</span>
-                </span>
-              </div>
 
-              <h1
-                className="text-2xl font-black tracking-tight leading-tight mb-1 font-display"
-                style={{ color: "var(--color-ink)" }}
-              >
-                {authStep === "otp" ? "One last step 🔐" : "Welcome to Forkful 👋"}
-              </h1>
-              <p className="text-sm font-medium" style={{ color: "var(--color-manifest)" }}>
-                {authStep === "otp"
-                  ? "Secure your account with a quick email verification."
-                  : "Sign in or create a new account using your email or Google."}
-              </p>
-            </motion.div>
+          {/* Desktop logo */}
+          <div className="login-desktop-logo" style={{ marginBottom: 28 }}>
+            <Link to="/landing" style={{ display: "inline-flex", alignItems: "center", gap: 9, textDecoration: "none" }}>
+              <ForkfulLogo bare size={28} />
+              <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "1.05rem", letterSpacing: "-0.04em", color: "var(--color-ink)" }}>Forkful</span>
+            </Link>
+          </div>
 
-            {/* ── Google OAuth ── */}
-            {authStep === "form" && (
-            <motion.div variants={itemVariants}>
-              <GoogleOAuthButton onClick={() => googleLogin()} loading={loading} />
-            </motion.div>
-            )}
+          {/* Card */}
+          <div style={{ background: "var(--bg-surface)", border: "1px solid var(--color-rule)", borderRadius: "13px", padding: "28px 24px", boxShadow: "0 8px 40px rgba(0,0,0,0.08)" }}>
 
-            {/* ── Divider ── */}
-            {authStep === "form" && (
-            <motion.div variants={itemVariants} className="flex items-center gap-3">
-              <div className="flex-1 h-px" style={{ backgroundColor: "var(--color-rule)" }} />
-              <span
-                className="text-[9px] font-mono tracking-widest uppercase font-bold"
-                style={{ color: "var(--color-ghost)" }}
-              >
-                or
-              </span>
-              <div className="flex-1 h-px" style={{ backgroundColor: "var(--color-rule)" }} />
-            </motion.div>
-            )}
+            <AnimatePresence mode="wait">
 
-            {/* ── Tabs Selector ── */}
-            {authStep === "form" && (
-            <motion.div variants={itemVariants} className="flex p-1 rounded-2xl bg-[var(--bg-surface-2)] border border-[var(--color-rule)]">
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab("signin");
-                  setEmail("");
-                  setPassword("");
-                }}
-                className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${activeTab === "signin"
-                    ? "bg-white dark:bg-slate-900 shadow-md text-orange-500"
-                    : "text-[var(--color-manifest)] hover:text-orange-500"
-                  }`}
-              >
-                Sign In
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab("signup");
-                  setEmail("");
-                  setPassword("");
-                  setConfirmPassword("");
-                  setFirstName("");
-                  setLastName("");
-                  setMobileNumber("");
-                  setAuthorityCode("");
-                }}
-                className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${activeTab === "signup"
-                    ? "bg-white dark:bg-slate-900 shadow-md text-orange-500"
-                    : "text-[var(--color-manifest)] hover:text-orange-500"
-                  }`}
-              >
-                Register
-              </button>
-            </motion.div>
-            )}
-
-            {/* ── Forms ── */}
-            {authStep === "form" ? (
-              <>
-              {activeTab === "signin" ? (
-              <motion.form variants={itemVariants} onSubmit={handleSignIn} className="space-y-4">
-                <FloatingLabelInput
-                  id="login-email"
-                  label="Email Address"
-                  type="email"
-                  value={email}
-                  onChange={setEmail}
-                  required
-                  autoComplete="email"
-                />
-
-                <div className="space-y-2">
-                  <FloatingLabelInput
-                    id="login-password"
-                    label="Password"
-                    type="password"
-                    value={password}
-                    onChange={setPassword}
-                    required
-                    showToggle={true}
-                    autoComplete="current-password"
-                  />
-                  <div className="text-right">
-                    <button
-                      type="button"
-                      onClick={() => toast.success("Password reset link simulation sent to ethereal!")}
-                      className="text-[10px] font-bold text-orange-500 hover:underline px-1 cursor-pointer"
-                    >
-                      Forgot Password?
+              {/* ── OTP step ── */}
+              {authStep === "otp" ? (
+                <motion.div key="otp" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.25 }}
+                  style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ width: 44, height: 44, borderRadius: 11, background: "rgba(255,87,51,0.10)", border: "1px solid rgba(255,87,51,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FF5733" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 01-2.06 0L2 7"/></svg>
+                    </div>
+                    <h1 style={{ fontFamily: "var(--font-display)", fontSize: "1.15rem", fontWeight: 800, letterSpacing: "-0.03em", color: "var(--color-ink)", margin: "0 0 6px" }}>Check your inbox</h1>
+                    <p style={{ fontSize: "0.8rem", color: "var(--color-manifest)", margin: 0 }}>
+                      Code sent to <span style={{ fontWeight: 700, color: "#FF5733" }}>{otpEmail}</span>
+                    </p>
+                  </div>
+                  <OtpInput value={otp} onChange={setOtp} onComplete={handleVerifyOtp} disabled={otpVerifying} />
+                  <PrimaryBtn loading={otpVerifying} disabled={otp.length !== 6} onClick={() => handleVerifyOtp()}>
+                    {otpVerifying ? "Verifying…" : "Confirm & Continue"}
+                  </PrimaryBtn>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.76rem" }}>
+                    <button type="button" onClick={() => { setAuthStep("form"); setOtp(""); }} style={{ color: "var(--color-ghost)", background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-body)" }}>← Back</button>
+                    <button type="button" onClick={handleResendOtp} disabled={resendCooldown > 0 || loading}
+                      style={{ color: resendCooldown > 0 ? "var(--color-ghost)" : "#FF5733", background: "none", border: "none", cursor: resendCooldown > 0 ? "default" : "pointer", fontWeight: 600, fontFamily: "var(--font-body)" }}>
+                      {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
                     </button>
                   </div>
-                </div>
+                </motion.div>
 
-                <button
-                  type="submit"
-                  disabled={loading || !email.trim() || !password.trim()}
-                  className="w-full h-13 rounded-2xl text-sm font-bold transition-all duration-150 disabled:opacity-40 cursor-pointer active:scale-[0.98] relative overflow-hidden"
-                  style={{
-                    height: "52px",
-                    background: "linear-gradient(135deg, #FF5733 0%, #FF824D 100%)",
-                    color: "white",
-                    boxShadow: "0 4px 16px rgba(255,87,51,0.30)",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.boxShadow = "0 6px 24px rgba(255,87,51,0.42)";
-                    e.currentTarget.style.transform = "translateY(-1px)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.boxShadow = "0 4px 16px rgba(255,87,51,0.30)";
-                    e.currentTarget.style.transform = "translateY(0)";
-                  }}
-                >
-                  {loading ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Signing In…
-                    </span>
-                  ) : (
-                    "Sign In"
-                  )}
-                </button>
-              </motion.form>
-            ) : (
-              <motion.form variants={itemVariants} onSubmit={handleRegister} className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <FloatingLabelInput
-                    id="register-firstname"
-                    label="First Name"
-                    type="text"
-                    value={firstName}
-                    onChange={setFirstName}
-                    required
-                  />
-                  <FloatingLabelInput
-                    id="register-lastname"
-                    label="Last Name"
-                    type="text"
-                    value={lastName}
-                    onChange={setLastName}
-                    required
-                  />
-                </div>
+              ) : (
+                <motion.div key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
 
-                <FloatingLabelInput
-                  id="register-mobile"
-                  label="Mobile Number"
-                  type="text"
-                  value={mobileNumber}
-                  onChange={setMobileNumber}
-                  required
-                />
-
-                <FloatingLabelInput
-                  id="register-authority-code"
-                  label="Authority Code (Optional)"
-                  type="password"
-                  value={authorityCode}
-                  onChange={setAuthorityCode}
-                />
-
-                <FloatingLabelInput
-                  id="register-email"
-                  label="Email Address"
-                  type="email"
-                  value={email}
-                  onChange={setEmail}
-                  required
-                  autoComplete="email"
-                />
-
-                <FloatingLabelInput
-                  id="register-password"
-                  label="Password"
-                  type="password"
-                  value={password}
-                  onChange={setPassword}
-                  required
-                  showToggle={true}
-                  autoComplete="new-password"
-                />
-
-                <div className="space-y-1.5">
-                  <FloatingLabelInput
-                    id="register-confirm-password"
-                    label="Confirm Password"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={setConfirmPassword}
-                    required
-                    showToggle={true}
-                    autoComplete="new-password"
-                  />
-                  {confirmPassword.length > 0 && (
-                    <p
-                      className="text-[10px] font-bold pl-1 flex items-center gap-1"
-                      style={{ color: passwordsMatch ? "#22C55E" : "#F87171" }}
-                    >
-                      {passwordsMatch ? "✓ Passwords match" : "✕ Passwords don't match"}
-                    </p>
-                  )}
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading || !email.trim() || !password.trim() || !confirmPassword.trim() || password !== confirmPassword || !firstName.trim() || !lastName.trim() || !mobileNumber.trim()}
-                  className="w-full h-13 rounded-2xl text-sm font-bold transition-all duration-150 disabled:opacity-40 cursor-pointer active:scale-[0.98] relative overflow-hidden"
-                  style={{
-                    height: "52px",
-                    background: "linear-gradient(135deg, #FF5733 0%, #FF824D 100%)",
-                    color: "white",
-                    boxShadow: "0 4px 16px rgba(255,87,51,0.30)",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.boxShadow = "0 6px 24px rgba(255,87,51,0.42)";
-                    e.currentTarget.style.transform = "translateY(-1px)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.boxShadow = "0 4px 16px rgba(255,87,51,0.30)";
-                    e.currentTarget.style.transform = "translateY(0)";
-                  }}
-                >
-                  {loading ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Registering…
-                    </span>
-                  ) : (
-                    "Register Account"
-                  )}
-                </button>
-              </motion.form>
-            )}
-              </>
-            ) : (
-              <motion.div
-                key="otp-step"
-                initial={{ opacity: 0, x: 24 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.35 }}
-                className="space-y-5"
-              >
-                {/* Step indicator */}
-                <div className="flex items-center gap-2 justify-center text-[10px] font-mono uppercase tracking-widest font-bold">
-                  <span className="flex items-center gap-1.5" style={{ color: "var(--color-ghost)" }}>
-                    <span
-                      className="w-5 h-5 rounded-full flex items-center justify-center text-[10px]"
-                      style={{ background: "rgba(34,197,94,0.15)", color: "#22C55E" }}
-                    >✓</span>
-                    Account
-                  </span>
-                  <span className="w-6 h-px" style={{ backgroundColor: "var(--color-route)" }} />
-                  <span className="flex items-center gap-1.5" style={{ color: "var(--color-route)" }}>
-                    <span
-                      className="w-5 h-5 rounded-full flex items-center justify-center text-[10px]"
-                      style={{ background: "rgba(255,87,51,0.18)", border: "1px solid var(--color-route)" }}
-                    >2</span>
-                    Verify
-                  </span>
-                </div>
-
-                <div className="text-center space-y-1.5">
-                  <div
-                    className="w-14 h-14 mx-auto rounded-2xl flex items-center justify-center text-2xl"
-                    style={{
-                      background: "linear-gradient(135deg, rgba(255,87,51,0.18), rgba(255,130,77,0.08))",
-                      border: "1px solid var(--color-rule)",
-                      boxShadow: "0 0 24px rgba(255,87,51,0.15)",
-                    }}
-                  >
-                    ✉️
+                  {/* Tab switcher */}
+                  <div style={{ display: "flex", borderBottom: "1px solid var(--color-rule)", marginBottom: 22 }}>
+                    {(["signin", "signup"] as const).map((t) => (
+                      <button key={t} type="button" onClick={() => setTab(t)}
+                        style={{ flex: 1, height: 38, fontSize: "0.8rem", fontWeight: 700, fontFamily: "var(--font-body)",
+                          background: "none", border: "none", borderBottom: `2px solid ${tab === t ? "#FF5733" : "transparent"}`,
+                          color: tab === t ? "#FF5733" : "var(--color-ghost)", cursor: "pointer", marginBottom: -1, transition: "color 0.18s" }}>
+                        {t === "signin" ? "Log In" : "Create Account"}
+                      </button>
+                    ))}
                   </div>
-                  <h2 className="text-lg font-black" style={{ color: "var(--color-ink)" }}>
-                    Verify your email
-                  </h2>
-                  <p className="text-xs" style={{ color: "var(--color-manifest)" }}>
-                    Enter the 6-digit code sent to
-                  </p>
-                  <p className="text-xs font-bold" style={{ color: "var(--color-route)" }}>
-                    {otpEmail}
-                  </p>
-                </div>
 
-                <OtpInput value={otp} onChange={setOtp} onComplete={handleVerifyOtp} disabled={otpVerifying} />
+                  <AnimatePresence mode="wait">
 
-                <button
-                  type="button"
-                  onClick={() => handleVerifyOtp()}
-                  disabled={otpVerifying || otp.length !== 6}
-                  className="w-full rounded-2xl text-sm font-bold transition-all duration-150 disabled:opacity-40 cursor-pointer active:scale-[0.98]"
-                  style={{
-                    height: "52px",
-                    background: "linear-gradient(135deg, #FF5733 0%, #FF824D 100%)",
-                    color: "white",
-                    boxShadow: "0 4px 16px rgba(255,87,51,0.30)",
-                  }}
-                >
-                  {otpVerifying ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Verifying…
-                    </span>
-                  ) : (
-                    "Verify & Continue"
-                  )}
-                </button>
+                    {tab === "signin" && (
+                      <motion.form key="signin" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}
+                        onSubmit={handleSignIn} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                        <h1 style={{ fontFamily: "var(--font-display)", fontSize: "1.2rem", fontWeight: 800, letterSpacing: "-0.03em", color: "var(--color-ink)", margin: "0 0 6px" }}>
+                          Log in to Forkful
+                        </h1>
+                        <GoogleBtn onClick={() => googleLogin()} loading={loading} />
+                        <Divider label="or" />
+                        <AuthField id="si-email" label="Email" type="email" value={siEmail} onChange={setSiEmail} autoComplete="email" required />
+                        <div>
+                          <AuthField id="si-password" label="Password" type="password" value={siPassword} onChange={setSiPassword} autoComplete="current-password" required />
+                          <div style={{ textAlign: "right", marginTop: 5 }}>
+                            <button type="button" style={{ fontSize: "0.73rem", color: "var(--color-ghost)", background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-body)" }}
+                              onClick={() => toast("Password reset coming soon.")}>Forgot password?</button>
+                          </div>
+                        </div>
+                        <PrimaryBtn loading={loading} disabled={!siEmail.trim() || !siPassword.trim()}>
+                          {loading ? "Signing in…" : "Sign In"}
+                        </PrimaryBtn>
+                      </motion.form>
+                    )}
 
-                <div className="flex items-center justify-between text-[11px]">
-                  <button
-                    type="button"
-                    onClick={handleBackToForm}
-                    className="font-bold hover:underline cursor-pointer"
-                    style={{ color: "var(--color-ghost)" }}
-                  >
-                    ← Back
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleResendOtp}
-                    disabled={resendCooldown > 0 || loading}
-                    className="font-bold hover:underline cursor-pointer disabled:opacity-40 disabled:no-underline"
-                    style={{ color: "var(--color-route)" }}
-                  >
-                    {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : "Resend code"}
-                  </button>
-                </div>
-              </motion.div>
-            )}
+                    {tab === "signup" && (
+                      <motion.form key="signup" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}
+                        onSubmit={handleSignUp} style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+                        <h1 style={{ fontFamily: "var(--font-display)", fontSize: "1.2rem", fontWeight: 800, letterSpacing: "-0.03em", color: "var(--color-ink)", margin: "0 0 4px" }}>
+                          Create your account
+                        </h1>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                          <AuthField id="su-fname" label="First Name" value={suFirst} onChange={setSuFirst} required />
+                          <AuthField id="su-lname" label="Last Name" value={suLast} onChange={setSuLast} required />
+                        </div>
+                        <AuthField id="su-mobile" label="Mobile" value={suMobile} onChange={setSuMobile} autoComplete="tel" required />
+                        <AuthField id="su-email" label="Email" type="email" value={suEmail} onChange={setSuEmail} autoComplete="email" required />
+                        <AuthField id="su-pw" label="Password" type="password" value={suPw} onChange={setSuPw} autoComplete="new-password" required hint="Min 8 characters" />
+                        <div>
+                          <AuthField id="su-confirm" label="Confirm Password" type="password" value={suConfirm} onChange={setSuConfirm} autoComplete="new-password" required />
+                          {suConfirm.length > 0 && (
+                            <p style={{ fontSize: "0.7rem", marginTop: 4, fontWeight: 600, color: pwMatch ? "#22C55E" : "#EF4444" }}>
+                              {pwMatch ? "✓ Passwords match" : "Passwords don't match"}
+                            </p>
+                          )}
+                        </div>
+                        <PrimaryBtn loading={loading} disabled={!suFirst.trim() || !suLast.trim() || !suMobile.trim() || !suEmail.trim() || !suPw.trim() || !suConfirm.trim() || !pwMatch}>
+                          {loading ? "Creating account…" : "Create Account"}
+                        </PrimaryBtn>
+                      </motion.form>
+                    )}
 
-            {/* ── Guest panel ── */}
-            {authStep === "form" && (
-            <motion.div variants={itemVariants} className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-px" style={{ backgroundColor: "var(--color-rule)" }} />
-                <span
-                  className="text-[9px] font-mono tracking-widest uppercase font-bold"
-                  style={{ color: "var(--color-ghost)" }}
-                >
-                  Enter as Guest
-                </span>
-                <div className="flex-1 h-px" style={{ backgroundColor: "var(--color-rule)" }} />
-              </div>
+                  </AnimatePresence>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
-              <div className="grid grid-cols-2 gap-2.5">
-                {BYPASS_PROFILES.map((p) => (
-                  <button
-                    key={p.role}
-                    type="button"
-                    disabled={loading}
-                    onClick={() =>
-                      handleBypassAuth({ email: p.email, name: p.name, role: p.role })
-                    }
-                    className="flex items-center gap-2 px-3 py-2.5 rounded-2xl text-xs transition-all duration-150 disabled:opacity-40 cursor-pointer border text-left hover:-translate-y-0.5"
-                    style={{
-                      backgroundColor: "rgba(255, 255, 255, 0.02)",
-                      borderColor: "var(--color-rule)",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = "var(--color-muted)";
-                      e.currentTarget.style.borderColor = "var(--color-route)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.02)";
-                      e.currentTarget.style.borderColor = "var(--color-rule)";
-                    }}
-                  >
-                    <div
-                      className="w-7 h-7 rounded-xl flex items-center justify-center text-sm flex-shrink-0"
-                      style={{
-                        backgroundColor: p.bg,
-                        color: p.color,
-                        border: "1px solid var(--color-rule)",
-                      }}
-                    >
-                      {p.role === "customer" && <BiUser className="text-base" />}
-                      {p.role === "rider" && <BiCycling className="text-base" />}
-                      {p.role === "seller" && <BiStore className="text-base" />}
-                      {p.role === "admin" && <BiShield className="text-base" />}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-bold truncate" style={{ color: "var(--color-ink)" }}>
-                        {p.label}
-                      </p>
-                      <p className="text-[9px] font-mono truncate" style={{ color: p.color }}>
-                        {p.role}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </motion.div>
-            )}
-
-            {/* ── Footer ── */}
-            <motion.p
-              variants={itemVariants}
-              className="text-[10px] text-center"
-              style={{ color: "var(--color-ghost)" }}
-            >
-              By signing in, you agree to our{" "}
-              <a
-                href="#"
-                className="underline underline-offset-2 transition-colors"
-                style={{ color: "var(--color-route)" }}
-              >
-                Terms
-              </a>{" "}
-              and{" "}
-              <a
-                href="#"
-                className="underline underline-offset-2 transition-colors"
-                style={{ color: "var(--color-route)" }}
-              >
-                Privacy Policy
-              </a>
-              .
-            </motion.p>
-
-            {/* ── Made with love footer ── */}
-            <motion.div
-              variants={itemVariants}
-              className="pt-4 text-center border-t"
-              style={{ borderColor: "var(--color-rule)" }}
-            >
-              <p
-                className="text-[11px] font-semibold"
-                style={{ color: "var(--color-manifest)", fontFamily: "var(--font-body)" }}
-              >
-                Made with{" "}
-                <span className="animate-pulse" style={{ color: "#FF5733" }}>♥</span>
-                {" "}by{" "}
-                <span
-                  className="font-black uppercase tracking-wider"
-                  style={{
-                    color: "var(--color-ink)",
-                    fontFamily: "var(--font-display)",
-                    letterSpacing: "0.05em",
-                  }}
-                >
-                  Agam Ghotra
-                </span>
-              </p>
-              <p
-                className="text-[9px] mt-0.5 font-mono"
-                style={{ color: "var(--color-ghost)" }}
-              >
-                © 2026 Forkful · All rights reserved
-              </p>
-            </motion.div>
-          </motion.div>
+          {/* Footer */}
+          <p style={{ textAlign: "center", fontSize: "0.68rem", color: "var(--color-ghost)", marginTop: 18, fontFamily: "var(--font-mono)" }}>
+            © 2026 Forkful ·{" "}
+            <Link to="/landing" style={{ color: "inherit", textDecoration: "underline", textUnderlineOffset: 3 }}>Home</Link>
+            {" · "}
+            <a href="/dev/login" style={{ color: "inherit", textDecoration: "none", opacity: 0.2 }}
+              onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.7"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.2"; }}>dev</a>
+          </p>
         </motion.div>
       </div>
+
+      {/* Responsive layout */}
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes auth-float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+        .auth-float-circle {
+          position: absolute;
+          border-radius: 50%;
+          background: rgba(255,255,255,0.07);
+          animation: auth-float 6s ease-in-out infinite;
+        }
+        /* Mobile: hide left panel, go full width on form */
+        @media (max-width: 900px) {
+          .login-left-panel { display: none !important; }
+          .login-right-panel { flex: 0 0 100% !important; max-width: 100% !important; }
+          .login-mobile-logo { display: block !important; }
+          .login-desktop-logo { display: none !important; }
+        }
+        /* Desktop: both panels visible, mobile logo hidden */
+        @media (min-width: 901px) {
+          .login-left-panel { display: flex; }
+          .login-right-panel { flex: 0 0 50% !important; max-width: 50% !important; }
+          .login-mobile-logo { display: none; }
+          .login-desktop-logo { display: block; }
+        }
+      `}</style>
     </div>
   );
 };
