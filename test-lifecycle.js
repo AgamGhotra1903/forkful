@@ -1,7 +1,7 @@
 import { MongoClient, ObjectId } from "./services/restaurant/node_modules/mongodb/lib/index.js";
 import jwt from "./services/restaurant/node_modules/jsonwebtoken/index.js";
 
-const MONGO_URI = process.env.MONGO_URI || "mongodb://admin:admin@localhost:27017/Zomato_Clone?authSource=admin";
+const MONGO_URI = process.env.MONGO_URI || "mongodb://your_mongodb_user:your_mongodb_password@localhost:27017,localhost:27017,localhost:27017/Zomato_Clone?ssl=true&replicaSet=atlas-1rblnt-shard-0&authSource=admin";
 const JWT_SECRET = "your_jwt_secret_here";
 
 const RESTAURANT_SERVICE = "http://localhost:5002";
