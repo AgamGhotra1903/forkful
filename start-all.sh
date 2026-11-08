@@ -22,14 +22,16 @@ cleanup() {
 trap cleanup SIGINT SIGTERM
 
 # ── 0. Ensure Infrastructure Containers Are Running ───────────────────────────
-heading "Checking Infrastructure Containers (MongoDB, Redis, RabbitMQ)"
+heading "Checking Infrastructure Containers (Redis, RabbitMQ)"
 if command -v docker &> /dev/null && docker info &> /dev/null; then
+  # Ensure local MongoDB container is NEVER running (Atlas only)
+  docker stop forkful_mongodb 2>/dev/null || true
   # Stop any conflicting application containers from Docker
   docker stop forkful_frontend forkful_auth forkful_admin forkful_realtime forkful_rider forkful_nginx forkful_restaurant forkful_utils 2>/dev/null || true
-  docker compose up -d mongodb rabbitmq redis
-  info "✔ Docker infrastructure containers running (MongoDB, Redis, RabbitMQ)"
+  docker compose up -d rabbitmq redis
+  info "✔ Docker infrastructure containers running (Redis, RabbitMQ)"
 else
-  warn "⚠️  Docker is not running or not found. Ensure MongoDB (27017), Redis (6379), and RabbitMQ (5672) are active locally."
+  warn "⚠️  Docker is not running or not found. Ensure Redis (6379) and RabbitMQ (5672) are active."
 fi
 
 # ── 1. Stop Lingering Port Processes ──────────────────────────────────────────
