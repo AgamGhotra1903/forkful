@@ -316,7 +316,7 @@ export const getNearbyRestaurant = TryCatch(async (req, res) => {
         },
       ];
 
-  const restaurants = await Restaurant.aggregate([
+  let restaurants = await Restaurant.aggregate([
     {
       $geoNear: {
         near: {
@@ -345,10 +345,46 @@ export const getNearbyRestaurant = TryCatch(async (req, res) => {
     ...menuMatchStage,
   ]);
 
+  let isExpandedCoverage = false;
+  // If no restaurants found within safeRadius (e.g. 30km), fallback to open/verified restaurants across all regions
+  if (restaurants.length === 0) {
+    restaurants = await Restaurant.aggregate([
+      {
+        $geoNear: {
+          near: {
+            type: "Point",
+            coordinates: [Number(longitude), Number(latitude)],
+          },
+          distanceField: "distance",
+          spherical: true,
+          query: { $or: [{ isVerified: true }, { isOpen: true }] },
+        },
+      },
+      {
+        $sort: {
+          isOpen: -1,
+          distance: 1,
+        },
+      },
+      {
+        $addFields: {
+          distanceKm: {
+            $round: [{ $divide: ["$distance", 1000] }, 2],
+          },
+        },
+      },
+      ...menuMatchStage,
+    ]);
+    if (restaurants.length > 0) {
+      isExpandedCoverage = true;
+    }
+  }
+
   res.json({
     success: true,
     count: restaurants.length,
     restaurants,
+    isExpandedCoverage,
   });
 });
 

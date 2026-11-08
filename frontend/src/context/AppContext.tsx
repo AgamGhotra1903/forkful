@@ -9,11 +9,94 @@ import {
 import { authService, restaurantService } from "../main";
 import type { AppContextType, ICart, LocationData, User } from "../types";
 import { Toaster } from "react-hot-toast";
+import { LocationModal } from "../components/LocationModal";
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 interface AppProviderProps {
   children: ReactNode;
+}
+
+// Robust reverse geocoder with Photon -> Nominatim fallback
+async function reverseGeocodeCoords(
+  lat: number,
+  lon: number
+): Promise<{ formattedAddress: string; city: string }> {
+  // 1. Try photon.komoot.io (fast, full CORS, accurate)
+  try {
+    const res = await fetch(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lon}`);
+    if (res.ok) {
+      const data = await res.json();
+      const feature = data.features?.[0];
+      if (feature?.properties) {
+        const p = feature.properties;
+        const cityName =
+          p.city || p.town || p.district || p.county || p.state || "Current City";
+        const parts = [p.name, p.street, p.district, p.city, p.state, p.country].filter(Boolean);
+        const formatted =
+          parts.length > 0 ? parts.join(", ") : `${cityName}, India`;
+        return { formattedAddress: formatted, city: cityName };
+      }
+    }
+  } catch (e) {
+    console.warn("Photon lookup failed:", e);
+  }
+
+  // 2. Try OpenStreetMap Nominatim
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`
+    );
+    if (res.ok) {
+      const data = await res.json();
+      const cityName =
+        data.address?.city ||
+        data.address?.town ||
+        data.address?.village ||
+        data.address?.suburb ||
+        data.address?.state_district ||
+        "Current City";
+      return {
+        formattedAddress: data.display_name || `${cityName}, India`,
+        city: cityName,
+      };
+    }
+  } catch (e) {
+    console.warn("Nominatim lookup failed:", e);
+  }
+
+  return {
+    formattedAddress: `Location (${lat.toFixed(4)}, ${lon.toFixed(4)})`,
+    city: "Your Location",
+  };
+}
+
+// IP-based Geolocation fallback (works instantaneously via client IP without GPS prompts)
+async function fetchIpLocation(): Promise<{
+  latitude: number;
+  longitude: number;
+  formattedAddress: string;
+  city: string;
+} | null> {
+  try {
+    const res = await fetch("https://ipwho.is/");
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.latitude && data.longitude) {
+        const cityName = data.city || data.region || "Current City";
+        const parts = [data.city, data.region, data.country].filter(Boolean);
+        return {
+          latitude: data.latitude,
+          longitude: data.longitude,
+          formattedAddress: parts.join(", "),
+          city: cityName,
+        };
+      }
+    }
+  } catch (e) {
+    console.warn("ipwho.is lookup failed:", e);
+  }
+  return null;
 }
 
 export const AppProvider = ({ children }: AppProviderProps) => {
@@ -39,9 +122,27 @@ export const AppProvider = ({ children }: AppProviderProps) => {
 
   const toggleDarkMode = () => setDarkMode((prev) => !prev);
 
-  const [location, setLocation] = useState<LocationData | null>(null);
+  // Initialize location from localStorage if user previously selected or saved one
+  const [location, setLocation] = useState<LocationData | null>(() => {
+    try {
+      const saved = localStorage.getItem("forkful_user_location");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.warn("Failed to parse saved location", e);
+    }
+    return null;
+  });
+
+  const [city, setCity] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem("forkful_user_city");
+      if (saved) return saved;
+    } catch (e) {}
+    return "Detecting location…";
+  });
+
   const [loadingLocation, setLoadingLocation] = useState(false);
-  const [city, setCity] = useState("Fecthing Location...");
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
 
   async function fetchUser() {
     try {
@@ -93,64 +194,97 @@ export const AppProvider = ({ children }: AppProviderProps) => {
     }
   }, [user]);
 
-  useEffect(() => {
+  // Robust location detector: GPS first, then automatic IP lookup, then graceful Mohali/Chandigarh default
+  const detectLocation = async (forceGps = false) => {
+    setLoadingLocation(true);
+
+    const tryIpFallback = async () => {
+      const ipLoc = await fetchIpLocation();
+      if (ipLoc) {
+        const locData: LocationData = {
+          latitude: ipLoc.latitude,
+          longitude: ipLoc.longitude,
+          formattedAddress: ipLoc.formattedAddress,
+        };
+        setLocation(locData);
+        setCity(ipLoc.city);
+        localStorage.setItem("forkful_user_location", JSON.stringify(locData));
+        localStorage.setItem("forkful_user_city", ipLoc.city);
+        setLoadingLocation(false);
+        return true;
+      }
+      return false;
+    };
+
     if (!navigator.geolocation) {
-      setLocation({
-        latitude: 25.4299625,
-        longitude: 81.7721885,
-        formattedAddress: "IIIT Allahabad, Prayagraj, Uttar Pradesh",
-      });
-      setCity("Prayagraj");
+      const ok = await tryIpFallback();
+      if (!ok && !location) {
+        const defaultLoc: LocationData = {
+          latitude: 30.6799,
+          longitude: 76.7221,
+          formattedAddress: "Sector 80, Mohali, Punjab 145308, India",
+        };
+        setLocation(defaultLoc);
+        setCity("Mohali");
+        localStorage.setItem("forkful_user_location", JSON.stringify(defaultLoc));
+        localStorage.setItem("forkful_user_city", "Mohali");
+      }
       setLoadingLocation(false);
       return;
     }
-    setLoadingLocation(true);
 
     navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
-          );
-          const data = await res.json();
-
-          setLocation({
-            latitude,
-            longitude,
-            formattedAddress: data.display_name || "current location",
-          });
-
-          setCity(
-            data.address?.city ||
-              data.address?.town ||
-              data.address?.village ||
-              "Your Location"
-          );
-          setLoadingLocation(false);
-        } catch (error) {
-          setLocation({
-            latitude,
-            longitude,
-            formattedAddress: "Current Location",
-          });
-          setCity("Failed to load");
-          setLoadingLocation(false);
-        }
-      },
-      (error) => {
-        console.warn("Geolocation failed or blocked, using Prayagraj fallback:", error);
-        setLocation({
-          latitude: 25.4299625,
-          longitude: 81.7721885,
-          formattedAddress: "IIIT Allahabad, Prayagraj, Uttar Pradesh",
-        });
-        setCity("Prayagraj");
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const geo = await reverseGeocodeCoords(latitude, longitude);
+        const locData: LocationData = {
+          latitude,
+          longitude,
+          formattedAddress: geo.formattedAddress,
+        };
+        setLocation(locData);
+        setCity(geo.city);
+        localStorage.setItem("forkful_user_location", JSON.stringify(locData));
+        localStorage.setItem("forkful_user_city", geo.city);
         setLoadingLocation(false);
       },
-      { timeout: 8000 }
+      async (err) => {
+        console.warn("GPS lookup denied or unavailable:", err.message);
+        const ok = await tryIpFallback();
+        if (!ok && !location) {
+          const defaultLoc: LocationData = {
+            latitude: 30.6799,
+            longitude: 76.7221,
+            formattedAddress: "Sector 80, Mohali, Punjab 145308, India",
+          };
+          setLocation(defaultLoc);
+          setCity("Mohali");
+          localStorage.setItem("forkful_user_location", JSON.stringify(defaultLoc));
+          localStorage.setItem("forkful_user_city", "Mohali");
+        }
+        setLoadingLocation(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 6000,
+        maximumAge: forceGps ? 0 : 300000,
+      }
     );
+  };
+
+  const selectLocation = (loc: LocationData, cityName: string) => {
+    setLocation(loc);
+    setCity(cityName);
+    localStorage.setItem("forkful_user_location", JSON.stringify(loc));
+    localStorage.setItem("forkful_user_city", cityName);
+  };
+
+  // Run initial detection only if not already saved in localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("forkful_user_location");
+    if (!saved) {
+      detectLocation(false);
+    }
   }, []);
 
   return (
@@ -171,9 +305,17 @@ export const AppProvider = ({ children }: AppProviderProps) => {
         subTotal,
         darkMode,
         toggleDarkMode,
+        setLocation,
+        setCity,
+        detectLocation,
+        selectLocation,
+        isLocationModalOpen,
+        setIsLocationModalOpen,
       }}
     >
       {children}
+
+      <LocationModal />
 
       <Toaster
         position="top-center"

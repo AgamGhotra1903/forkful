@@ -34,6 +34,12 @@ export interface AppContextType {
   quantity: number;
   darkMode: boolean;
   toggleDarkMode: () => void;
+  setLocation: React.Dispatch<React.SetStateAction<LocationData | null>>;
+  setCity: React.Dispatch<React.SetStateAction<string>>;
+  detectLocation: (forceGps?: boolean) => Promise<void>;
+  selectLocation: (loc: LocationData, cityName: string) => void;
+  isLocationModalOpen: boolean;
+  setIsLocationModalOpen: (open: boolean) => void;
 }
 
 export interface IRestaurant {

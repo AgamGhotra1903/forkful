@@ -5,7 +5,7 @@ import { motion, AnimatePresence, useScroll, useTransform, useSpring, useReduced
 import ForkfulLogo from "../components/ForkfulLogo";
 
 const Navbar = () => {
-  const { isAuth, city, quantity, user, darkMode, toggleDarkMode } = useAppData();
+  const { isAuth, city, quantity, user, darkMode, toggleDarkMode, setIsLocationModalOpen } = useAppData();
   const location = useLocation();
   const navigate = useNavigate();
   const headerRef = useRef<HTMLElement>(null);
@@ -159,7 +159,7 @@ const Navbar = () => {
                   e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)";
                   e.currentTarget.style.borderColor = "var(--color-rule)";
                 }}
-                onClick={() => navigate("/")}
+                onClick={() => setIsLocationModalOpen(true)}
               >
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#FF5733" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />

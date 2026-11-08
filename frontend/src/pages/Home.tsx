@@ -620,7 +620,7 @@ const PromoBanner = ({ banner }: { banner: typeof PROMO_BANNERS[0] }) => (
 );
 
 const Home = () => {
-  const { location, user, setUser, city } = useAppData();
+  const { location, user, setUser, city, setIsLocationModalOpen, loadingLocation } = useAppData();
   const navigate = useNavigate();
 
   const [dietaryPrefs, setDietaryPrefs] = useState<string[]>(user?.dietaryPreferences || []);
@@ -1137,19 +1137,27 @@ const Home = () => {
                 }} />
                 
                 {/* Location pill */}
-                <div className="flex items-center gap-2 mb-3.5 px-3 py-1.5 rounded-full border border-white/5 bg-white/[0.02] w-fit">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FF5733" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <button
+                  type="button"
+                  onClick={() => setIsLocationModalOpen(true)}
+                  className="flex items-center gap-2 mb-3.5 px-3 py-1.5 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] hover:border-primary/40 transition-all cursor-pointer group w-fit text-left"
+                  title="Click to select or change delivery location"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FF5733" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="group-hover:scale-110 transition-transform shrink-0">
                     <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
                     <circle cx="12" cy="10" r="3" />
                   </svg>
                   <span className="text-[10px] font-bold tracking-wide truncate max-w-[200px]" style={{ color: "var(--color-ink)", fontFamily: "var(--font-mono)" }}>
-                    {location?.formattedAddress?.split(",")[0] ?? "Detecting location…"}
+                    {loadingLocation ? "Detecting location…" : (city ? `${city}` : (location?.formattedAddress?.split(",")[0] ?? "Set location"))}
+                  </span>
+                  <span className="text-[9px] text-primary underline underline-offset-2 ml-1 opacity-80 group-hover:opacity-100 uppercase tracking-wider font-semibold">
+                    Change
                   </span>
                   <span className="relative flex h-1.5 w-1.5 ml-1">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span>
                   </span>
-                </div>
+                </button>
 
                 <AISearchBar
                   value={search}

@@ -91,14 +91,41 @@ const AddAddressPage = () => {
   // Reverse geocoding
   const fetchFormattedAddress = async (lat: number, lng: number) => {
     try {
+      // 1. Try Photon
+      const pRes = await fetch(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}`);
+      if (pRes.ok) {
+        const pData = await pRes.json();
+        const feat = pData.features?.[0];
+        if (feat?.properties) {
+          const p = feat.properties;
+          const parts = [p.name, p.street, p.district, p.city, p.state, p.country].filter(Boolean);
+          if (parts.length > 0) {
+            setFormattedAddress(parts.join(", "));
+            return;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Photon lookup failed:", e);
+    }
+
+    try {
+      // 2. Try Nominatim
       const res = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
       );
-      const data = await res.json();
-      setFormattedAddress(data.display_name || "");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.display_name) {
+          setFormattedAddress(data.display_name);
+          return;
+        }
+      }
     } catch {
-      toast.error("Failed to fetch address details");
+      // ignore
     }
+
+    setFormattedAddress(`Coordinates (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
   };
 
   const setLocation = (lat: number, lng: number) => {
