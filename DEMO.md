@@ -140,3 +140,4 @@ Rider Dashboard ←────────────────────�
 - [x] **Typo fix sweep** — `quauntity`, `isAvailble`, `fromattedAddress`, `platfromFee` all corrected
 - [x] **Promo code engine** — NEW50, FREEDEL, NIGHT30
 - [x] **Dark/light mode** — persistent via localStorage
+

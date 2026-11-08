@@ -2,12 +2,12 @@ import { MongoClient, ObjectId } from "./services/restaurant/node_modules/mongod
 import jwt from "./services/restaurant/node_modules/jsonwebtoken/index.js";
 import { io } from "./frontend/node_modules/socket.io-client/build/esm/index.js";
 
-const MONGO_URI = "mongodb+srv://your_mongodb_user:your_mongodb_password@localhost:27017/?appName=Cluster0";
+const MONGO_URI = process.env.MONGO_URI || "mongodb://admin:admin@localhost:27017/Zomato_Clone?authSource=admin";
 const JWT_SECRET = "your_jwt_secret_here";
 
-const RESTAURANT_SERVICE = "http://localhost:5001";
-const RIDER_SERVICE = "http://localhost:5005";
-const REALTIME_SERVICE = "http://localhost:5004";
+const RESTAURANT_SERVICE = "http://localhost:5002";
+const RIDER_SERVICE = "http://localhost:5003";
+const REALTIME_SERVICE = "http://localhost:5006";
 
 // Test Users
 const CUSTOMER = { _id: "6a371837553aad96fa84b1c4", email: "customer@tomato.com", role: "customer", name: "Test Customer" };
