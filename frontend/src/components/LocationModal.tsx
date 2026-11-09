@@ -327,3 +327,4 @@ export const LocationModal: React.FC = () => {
     </AnimatePresence>
   );
 };
+

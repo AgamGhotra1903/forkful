@@ -3,15 +3,37 @@ import amqp from "amqplib";
 let channel: amqp.Channel;
 
 export const connectRabbitMQ = async () => {
-  const connection = await amqp.connect(process.env.RABBITMQ_URL!);
+  try {
+    const connection = await amqp.connect(process.env.RABBITMQ_URL!);
 
-  channel = await connection.createChannel();
+    connection.on("error", (err) => {
+      console.error("RabbitMQ connection error (utils service):", err.message);
+    });
 
-  await channel.assertQueue(process.env.PAYMENT_QUEUE!, {
-    durable: true,
-  });
+    connection.on("close", () => {
+      console.warn("RabbitMQ connection closed (utils service), reconnecting in 5s...");
+      setTimeout(connectRabbitMQ, 5000);
+    });
 
-  console.log("🐇 connected To Rabbitmq");
+    channel = await connection.createChannel();
+
+    channel.on("error", (err) => {
+      console.error("RabbitMQ channel error (utils service):", err.message);
+    });
+
+    channel.on("close", () => {
+      console.warn("RabbitMQ channel closed (utils service)");
+    });
+
+    await channel.assertQueue(process.env.PAYMENT_QUEUE!, {
+      durable: true,
+    });
+
+    console.log("🐇 connected To Rabbitmq");
+  } catch (err: any) {
+    console.error("Failed to connect to RabbitMQ (utils service):", err.message);
+    setTimeout(connectRabbitMQ, 5000);
+  }
 };
 
 export const getChannel = () => channel;
