@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
+import { MapContainer, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import axios from 'axios';
 import { riderService } from '../main';
 import { useAppData } from '../context/AppContext';
+import AppTileLayer from './AppTileLayer';
 
 const DEFAULT_ZOOM = 15;
 
@@ -139,12 +140,7 @@ const RiderIdleMap: React.FC<RiderIdleMapProps> = ({ isOnline = false }) => {
         zoomControl={false}
         attributionControl={false}
       >
-        <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          subdomains="abcd"
-          maxZoom={19}
-        />
+        <AppTileLayer />
         <Marker position={riderPos} icon={riderIcon} />
         <FlyToPosition position={riderPos} />
         <InvalidateMapSize />

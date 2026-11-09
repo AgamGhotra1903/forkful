@@ -643,6 +643,13 @@ button:active { transform: scale(0.97); }
   visibility: inherit !important;
 }
 
+/* Dark theme filter for OpenStreetMap raster tiles (free fallback without API key) */
+.dark-tile-layer,
+.dark-tile-layer .leaflet-tile,
+.dark-tile-layer img {
+  filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7) !important;
+}
+
 /* ─────────────────────────────────────────────────────────────────────────────
    MISC TAILWIND UTILITIES (layer)
 ───────────────────────────────────────────────────────────────────────────── */

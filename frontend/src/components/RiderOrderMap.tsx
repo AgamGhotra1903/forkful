@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-
-import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
+import { MapContainer, Marker, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import type { IOrder } from "../types";
 import axios from "axios";
 import { riderService, realtimeService } from "../main";
 import { useSocket } from "../context/SocketContext";
+import AppTileLayer from "./AppTileLayer";
 
 
 const riderIcon = L.divIcon({
@@ -194,12 +194,7 @@ const RiderOrderMap = ({ order }: RiderOrderMapProps) => {
         zoomControl={false}
         attributionControl={false}
       >
-        <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          subdomains="abcd"
-          maxZoom={19}
-        />
+        <AppTileLayer />
         <FitBounds positions={positions} />
         <MapUpdater position={myLocation} />
         <Marker position={myLocation} icon={riderIcon} />

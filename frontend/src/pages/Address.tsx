@@ -1,10 +1,10 @@
 import {
   MapContainer,
-  TileLayer,
   Marker,
   useMapEvents,
   useMap,
 } from "react-leaflet";
+import AppTileLayer from "../components/AppTileLayer";
 import { useEffect, useState } from "react";
 import axios from "axios";
 import toast from "react-hot-toast";
@@ -230,12 +230,7 @@ const AddAddressPage = () => {
             className="h-full w-full"
             style={{ height: "100%", width: "100%", zIndex: 1 }}
           >
-            <TileLayer
-              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-              subdomains="abcd"
-              maxZoom={19}
-            />
+            <AppTileLayer />
             <LocationPicker setLocation={setLocation} />
             <LocateMeButton onLocate={setLocation} />
             {latitude && longitude && <Marker position={[latitude, longitude]} />}
