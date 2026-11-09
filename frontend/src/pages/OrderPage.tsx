@@ -270,17 +270,28 @@ const OrderPage = () => {
   }, [socket, id]);
 
 
-  // Always fetch live restaurant coordinates from the API.
-  // The embedded order.restaurantLocation was written at order-creation time and
-  // may be stale if the seller later updates their location.
+  // Always fetch live restaurant coordinates from the API, falling back to embedded order data.
   useEffect(() => {
-    if (!order?.restaurantId) return;
+    if (!order) return;
+
+    // Immediately seed with embedded coordinates if present
+    if (order.restaurantLocation?.latitude && order.restaurantLocation?.longitude) {
+      setRestaurantCoordinates([order.restaurantLocation.latitude, order.restaurantLocation.longitude]);
+    }
+
+    if (!order.restaurantId) return;
+
     (async () => {
       try {
-        const { data } = await axios.get(`${restaurantService}/api/restaurant/${order.restaurantId}`, {
+        const restId =
+          typeof order.restaurantId === "object" && order.restaurantId !== null
+            ? (order.restaurantId as any)._id
+            : order.restaurantId;
+
+        const { data } = await axios.get(`${restaurantService}/api/restaurant/${restId}`, {
           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
         });
-        // Prefer the GeoJSON `location` field [lng, lat], fall back to autoLocation
+
         if (data?.location?.coordinates?.length === 2) {
           const [lng, lat] = data.location.coordinates;
           if (lat && lng) { setRestaurantCoordinates([lat, lng]); return; }
@@ -289,18 +300,11 @@ const OrderPage = () => {
           const [lng, lat] = data.autoLocation.coordinates;
           if (lat && lng) { setRestaurantCoordinates([lat, lng]); return; }
         }
-        // Last resort: use embedded order coordinates
-        if (order.restaurantLocation?.latitude && order.restaurantLocation?.longitude) {
-          setRestaurantCoordinates([order.restaurantLocation.latitude, order.restaurantLocation.longitude]);
-        }
-      } catch {
-        // Network error — fall back to embedded coordinates
-        if (order.restaurantLocation?.latitude && order.restaurantLocation?.longitude) {
-          setRestaurantCoordinates([order.restaurantLocation.latitude, order.restaurantLocation.longitude]);
-        }
+      } catch (err) {
+        console.warn("Failed to fetch fresh restaurant location, using embedded fallback:", err);
       }
     })();
-  }, [order?.restaurantId]);
+  }, [order?.restaurantId, order?.restaurantLocation]);
 
   useEffect(() => {
     if (!order) { setRiderLocation(null); return; }

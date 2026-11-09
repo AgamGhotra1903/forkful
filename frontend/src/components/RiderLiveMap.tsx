@@ -13,15 +13,39 @@ interface RiderLiveMapProps {
   socket: any;
 }
 
-const FitBounds = ({ positions }: { positions: L.LatLngExpression[] }) => {
+// Ensures Leaflet recalculates dimensions after framer-motion page transitions
+const InvalidateMapSize = () => {
   const map = useMap();
-  const lastKeyRef = React.useRef("");
   useEffect(() => {
-    if (positions.length < 2) return;
-    const key = JSON.stringify(positions);
-    if (key === lastKeyRef.current) return; // only refit when values actually change
+    const t1 = setTimeout(() => map.invalidateSize(), 100);
+    const t2 = setTimeout(() => map.invalidateSize(), 350);
+    const handleResize = () => map.invalidateSize();
+    window.addEventListener("resize", handleResize);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [map]);
+  return null;
+};
+
+const FitBounds = ({ positions }: { positions: [number, number][] }) => {
+  const map = useMap();
+  const lastKeyRef = useRef("");
+  useEffect(() => {
+    const validPositions = positions.filter(
+      (p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1])
+    );
+    if (validPositions.length < 2) return;
+    const key = JSON.stringify(validPositions);
+    if (key === lastKeyRef.current) return;
     lastKeyRef.current = key;
-    map.fitBounds(positions as L.LatLngBoundsExpression, { padding: [80, 80], maxZoom: 16 });
+    try {
+      map.fitBounds(validPositions as L.LatLngBoundsExpression, { padding: [80, 80], maxZoom: 16 });
+    } catch (e) {
+      console.warn("fitBounds failed:", e);
+    }
   }, [positions, map]);
   return null;
 };
@@ -31,6 +55,12 @@ const RiderLiveMap: React.FC<RiderLiveMapProps> = ({ orderId, restaurantLocation
   const [routeCoords, setRouteCoords] = useState<[number, number][]>([]);
   const [_routeInfo, setRouteInfo] = useState<{ distance: number; duration: number }>({ distance: 0, duration: 0 });
   const watchIdRef = useRef<number | null>(null);
+
+  // Safe coordinate normalization
+  const safeRestLat = Number.isFinite(restaurantLocation?.lat) ? restaurantLocation.lat : 28.6139;
+  const safeRestLng = Number.isFinite(restaurantLocation?.lng) ? restaurantLocation.lng : 77.2090;
+  const safeCustLat = Number.isFinite(customerLocation?.lat) ? customerLocation.lat : 28.5244;
+  const safeCustLng = Number.isFinite(customerLocation?.lng) ? customerLocation.lng : 77.1855;
 
   // Custom marker icons with pulsing animation
   const riderIcon = L.divIcon({
@@ -97,7 +127,6 @@ const RiderLiveMap: React.FC<RiderLiveMapProps> = ({ orderId, restaurantLocation
 
   // REST + Socket Location Emitter
   const emitLocation = async (latitude: number, longitude: number) => {
-    // 1. Persist in database via rider service REST API
     const token = localStorage.getItem("token");
     if (token) {
       axios
@@ -109,7 +138,6 @@ const RiderLiveMap: React.FC<RiderLiveMapProps> = ({ orderId, restaurantLocation
         .catch((err) => console.error("Failed to update rider location in DB:", err.message));
     }
 
-    // 2. Relay via Socket.io for immediate customer map tracking updates
     socket?.emit('rider:update_location', { lat: latitude, lng: longitude, orderId });
   };
 
@@ -122,18 +150,21 @@ const RiderLiveMap: React.FC<RiderLiveMapProps> = ({ orderId, restaurantLocation
           setRiderPosition([latitude, longitude]);
           emitLocation(latitude, longitude);
         },
-        (err) => console.warn('Geolocation error:', err),
-        { enableHighAccuracy: true, timeout: 10000 }
+        () => {
+          // fallback to restaurant location
+          if (!riderPosition) {
+            setRiderPosition([safeRestLat, safeRestLng]);
+          }
+        },
+        { enableHighAccuracy: true, timeout: 8000 }
       );
     };
 
     updateLocation();
     
-    // watchPosition updates local state immediately so rider sees marker moving in realtime
     watchIdRef.current = navigator.geolocation.watchPosition((pos) => {
       const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
       setRiderPosition(coords);
-      // We also do a quick socket emit to update the customer without hitting DB on every tiny watch update
       socket?.emit('rider:update_location', {
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
@@ -141,31 +172,29 @@ const RiderLiveMap: React.FC<RiderLiveMapProps> = ({ orderId, restaurantLocation
       });
     });
 
-    // Periodic 10s poll updates DB/REST layer
     const intervalId = setInterval(updateLocation, 10000);
 
     return () => {
       if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
       clearInterval(intervalId);
     };
-  }, [orderId, socket]);
+  }, [orderId, socket, safeRestLat, safeRestLng]);
 
   // Fetch route when rider position updates
   useEffect(() => {
-    if (riderPosition && restaurantLocation) {
-      const targetLoc =
-        orderStatus === 'picked_up'
-          ? [customerLocation.lat, customerLocation.lng]
-          : [restaurantLocation.lat, restaurantLocation.lng];
-      fetchRoute(riderPosition, targetLoc as [number, number]);
-    }
-  }, [riderPosition, orderStatus, restaurantLocation, customerLocation]);
+    const rPos = riderPosition || [safeRestLat, safeRestLng];
+    const targetLoc =
+      orderStatus === 'picked_up'
+        ? [safeCustLat, safeCustLng]
+        : [safeRestLat, safeRestLng];
+    fetchRoute(rPos, targetLoc as [number, number]);
+  }, [riderPosition, orderStatus, safeRestLat, safeRestLng, safeCustLat, safeCustLng]);
 
   // Socket listener for updates
   useEffect(() => {
     socket?.emit('chat:join_order', orderId);
     socket?.on('rider:location_update', (data: { lat: number; lng: number; orderId: string }) => {
-      if (data.orderId === orderId) {
+      if (data.orderId === orderId && Number.isFinite(data.lat) && Number.isFinite(data.lng)) {
         setRiderPosition([data.lat, data.lng]);
       }
     });
@@ -174,69 +203,72 @@ const RiderLiveMap: React.FC<RiderLiveMapProps> = ({ orderId, restaurantLocation
     };
   }, [orderId, socket]);
 
-  const positions: L.LatLngExpression[] = [
-    [restaurantLocation.lat, restaurantLocation.lng],
-    riderPosition || [restaurantLocation.lat, restaurantLocation.lng],
-    [customerLocation.lat, customerLocation.lng],
+  const positions: [number, number][] = [
+    [safeRestLat, safeRestLng],
+    riderPosition || [safeRestLat, safeRestLng],
+    [safeCustLat, safeCustLng],
   ];
 
   return (
-    <MapContainer
-      center={[restaurantLocation.lat, restaurantLocation.lng]}
-      zoom={13}
-      style={{ width: '100%', height: '100%' }}
-      zoomControl={false}
-      attributionControl={false}
-    >
-      <TileLayer
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        subdomains="abcd"
-        maxZoom={19}
-      />
-
-      {/* Restaurant marker */}
-      <Marker position={[restaurantLocation.lat, restaurantLocation.lng]} icon={restaurantIcon}>
-        <Popup>
-          <div className="text-sm">
-            <p className="font-bold">{restaurantLocation.name}</p>
-            <p className="text-xs text-gray-600">{restaurantLocation.address}</p>
-          </div>
-        </Popup>
-      </Marker>
-
-      {/* Rider marker */}
-      {riderPosition && (
-        <Marker position={riderPosition} icon={riderIcon}>
-          <Popup>Your Delivery Partner</Popup>
-        </Marker>
-      )}
-
-      {/* Customer marker */}
-      <Marker position={[customerLocation.lat, customerLocation.lng]} icon={customerIcon}>
-        <Popup>
-          <div className="text-sm">
-            <p className="font-bold">{customerLocation.name}</p>
-            <p className="text-xs text-gray-600">{customerLocation.address}</p>
-          </div>
-        </Popup>
-      </Marker>
-
-      {/* Route polyline */}
-      {routeCoords.length > 0 && (
-        <Polyline
-          positions={routeCoords}
-          pathOptions={{
-            color: '#f97316',
-            weight: 4,
-            dashArray: orderStatus === 'picked_up' ? '' : '10 6',
-            opacity: 0.9,
-          }}
+    <div style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}>
+      <MapContainer
+        center={[safeRestLat, safeRestLng]}
+        zoom={13}
+        style={{ width: '100%', height: '100%' }}
+        zoomControl={false}
+        attributionControl={false}
+      >
+        <TileLayer
+          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          subdomains="abcd"
+          maxZoom={19}
         />
-      )}
 
-      <FitBounds positions={positions} />
-    </MapContainer>
+        {/* Restaurant marker */}
+        <Marker position={[safeRestLat, safeRestLng]} icon={restaurantIcon}>
+          <Popup>
+            <div className="text-sm">
+              <p className="font-bold">{restaurantLocation?.name || "Restaurant"}</p>
+              <p className="text-xs text-gray-600">{restaurantLocation?.address || ""}</p>
+            </div>
+          </Popup>
+        </Marker>
+
+        {/* Rider marker */}
+        {riderPosition && (
+          <Marker position={riderPosition} icon={riderIcon}>
+            <Popup>Your Delivery Partner</Popup>
+          </Marker>
+        )}
+
+        {/* Customer marker */}
+        <Marker position={[safeCustLat, safeCustLng]} icon={customerIcon}>
+          <Popup>
+            <div className="text-sm">
+              <p className="font-bold">{customerLocation?.name || "Customer"}</p>
+              <p className="text-xs text-gray-600">{customerLocation?.address || ""}</p>
+            </div>
+          </Popup>
+        </Marker>
+
+        {/* Route polyline */}
+        {routeCoords.length > 1 && (
+          <Polyline
+            positions={routeCoords}
+            pathOptions={{
+              color: '#f97316',
+              weight: 4,
+              dashArray: orderStatus === 'picked_up' ? '' : '10 6',
+              opacity: 0.9,
+            }}
+          />
+        )}
+
+        <FitBounds positions={positions} />
+        <InvalidateMapSize />
+      </MapContainer>
+    </div>
   );
 };
 

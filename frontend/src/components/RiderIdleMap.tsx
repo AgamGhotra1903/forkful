@@ -4,9 +4,26 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import axios from 'axios';
 import { riderService } from '../main';
+import { useAppData } from '../context/AppContext';
 
-const DEFAULT_CENTER: [number, number] = [28.6139, 77.209];
 const DEFAULT_ZOOM = 15;
+
+// Ensures Leaflet recalculates dimensions after framer-motion page transition animations
+const InvalidateMapSize = () => {
+  const map = useMap();
+  useEffect(() => {
+    const t1 = setTimeout(() => map.invalidateSize(), 100);
+    const t2 = setTimeout(() => map.invalidateSize(), 350);
+    const handleResize = () => map.invalidateSize();
+    window.addEventListener("resize", handleResize);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [map]);
+  return null;
+};
 
 // Smoothly pans to rider position — only refits when value actually changes
 const FlyToPosition = ({ position }: { position: [number, number] }) => {
@@ -31,8 +48,24 @@ interface RiderIdleMapProps {
 }
 
 const RiderIdleMap: React.FC<RiderIdleMapProps> = ({ isOnline = false }) => {
-  const [riderPos, setRiderPos] = useState<[number, number]>(DEFAULT_CENTER);
-  const posRef = useRef<[number, number]>(DEFAULT_CENTER);
+  const { location } = useAppData();
+
+  const getInitialCoords = (): [number, number] => {
+    if (location?.latitude && location?.longitude) {
+      return [location.latitude, location.longitude];
+    }
+    try {
+      const saved = localStorage.getItem("forkful_user_location");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.latitude && parsed.longitude) return [parsed.latitude, parsed.longitude];
+      }
+    } catch {}
+    return [30.6799, 76.7221]; // Default Mohali / Chandigarh
+  };
+
+  const [riderPos, setRiderPos] = useState<[number, number]>(getInitialCoords);
+  const posRef = useRef<[number, number]>(riderPos);
 
   const riderIcon = L.divIcon({
     html: `<div style="position:relative;width:48px;height:48px">
@@ -98,22 +131,25 @@ const RiderIdleMap: React.FC<RiderIdleMapProps> = ({ isOnline = false }) => {
   }, [isOnline]);
 
   return (
-    <MapContainer
-      center={riderPos}
-      zoom={DEFAULT_ZOOM}
-      style={{ width: '100%', height: '100%' }}
-      zoomControl={false}
-      attributionControl={false}
-    >
-      <TileLayer
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        subdomains="abcd"
-        maxZoom={19}
-      />
-      <Marker position={riderPos} icon={riderIcon} />
-      <FlyToPosition position={riderPos} />
-    </MapContainer>
+    <div style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}>
+      <MapContainer
+        center={riderPos}
+        zoom={DEFAULT_ZOOM}
+        style={{ width: '100%', height: '100%' }}
+        zoomControl={false}
+        attributionControl={false}
+      >
+        <TileLayer
+          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          subdomains="abcd"
+          maxZoom={19}
+        />
+        <Marker position={riderPos} icon={riderIcon} />
+        <FlyToPosition position={riderPos} />
+        <InvalidateMapSize />
+      </MapContainer>
+    </div>
   );
 };
 

@@ -12,33 +12,66 @@ interface UserOrderMapProps {
   socket: any;
 }
 
-const FitBoundsUser = ({ positions }: { positions: L.LatLngExpression[] }) => {
+// Ensures Leaflet recalculates dimensions after framer-motion page transition animations
+const InvalidateMapSize = () => {
   const map = useMap();
-  const lastKeyRef = useRef("");
   useEffect(() => {
-    if (positions.length < 2) return;
-    const key = JSON.stringify(positions);
-    if (key === lastKeyRef.current) return; // only refit when values actually change
-    lastKeyRef.current = key;
-    map.fitBounds(positions as L.LatLngBoundsExpression, { padding: [80, 80], maxZoom: 16 });
-  }, [positions, map]);
+    const t1 = setTimeout(() => map.invalidateSize(), 100);
+    const t2 = setTimeout(() => map.invalidateSize(), 350);
+    const handleResize = () => map.invalidateSize();
+    window.addEventListener("resize", handleResize);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [map]);
   return null;
 };
 
-// Smoothly follows the rider marker so it's always visible
-const MapUpdater = ({ position }: { position: { lat: number; lng: number } | undefined }) => {
+// Coordinated camera controller that prevents map.fitBounds and map.flyTo from colliding
+const CameraController = ({
+  positions,
+  riderPosition,
+  orderStatus,
+}: {
+  positions: [number, number][];
+  riderPosition?: { lat: number; lng: number };
+  orderStatus: string;
+}) => {
   const map = useMap();
-  const prevRef = useRef<{ lat: number; lng: number } | null>(null);
+  const hasInitializedRef = useRef(false);
+  const lastStatusRef = useRef(orderStatus);
+
+  // Fit bounds on mount or when order status transitions
   useEffect(() => {
-    if (!position) return;
-    const pos: [number, number] = [position.lat, position.lng];
-    if (!prevRef.current) {
-      map.setView(pos, map.getZoom());
-    } else {
-      map.flyTo(pos, map.getZoom(), { animate: true, duration: 1.2 });
+    const valid = positions.filter(
+      (p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1])
+    );
+    if (valid.length < 2) return;
+
+    const statusChanged = lastStatusRef.current !== orderStatus;
+    if (!hasInitializedRef.current || statusChanged) {
+      hasInitializedRef.current = true;
+      lastStatusRef.current = orderStatus;
+      try {
+        map.fitBounds(valid as L.LatLngBoundsExpression, { padding: [60, 60], maxZoom: 16 });
+      } catch (err) {
+        console.warn("fitBounds error:", err);
+      }
     }
-    prevRef.current = position;
-  }, [position, map]);
+  }, [positions, orderStatus, map]);
+
+  // Smoothly pan to rider when moving, without triggering concurrent animation errors
+  useEffect(() => {
+    if (!riderPosition || !Number.isFinite(riderPosition.lat) || !Number.isFinite(riderPosition.lng)) return;
+    if (orderStatus === 'picked_up' && hasInitializedRef.current) {
+      try {
+        map.panTo([riderPosition.lat, riderPosition.lng], { animate: true, duration: 1 });
+      } catch {}
+    }
+  }, [riderPosition, orderStatus, map]);
+
   return null;
 };
 
@@ -51,6 +84,12 @@ const UserOrderMap: React.FC<UserOrderMapProps> = ({
   socket,
 }) => {
   const [routeCoords, setRouteCoords] = useState<[number, number][]>([]);
+
+  // Safe coordinates
+  const safeRestLat = Number.isFinite(restaurantLocation?.lat) ? restaurantLocation.lat : 28.6139;
+  const safeRestLng = Number.isFinite(restaurantLocation?.lng) ? restaurantLocation.lng : 77.2090;
+  const safeCustLat = Number.isFinite(customerLocation?.lat) ? customerLocation.lat : 28.5244;
+  const safeCustLng = Number.isFinite(customerLocation?.lng) ? customerLocation.lng : 77.1855;
 
   const riderIcon = L.divIcon({
     html: `<div style="position:relative;width:48px;height:48px">
@@ -70,7 +109,7 @@ const UserOrderMap: React.FC<UserOrderMapProps> = ({
 
   const restaurantIcon = L.divIcon({
     html: `<div style="background:#10b981;border-radius:50% 50% 50% 0;width:36px;height:36px;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(16,185,129,0.5);border:1.5px solid white;opacity:${
-      orderStatus === 'picked_up' ? '0.4' : '1'
+      orderStatus === 'picked_up' ? '0.5' : '1'
     }">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(45deg)">
         <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2" />
@@ -99,14 +138,11 @@ const UserOrderMap: React.FC<UserOrderMapProps> = ({
   useEffect(() => {
     const fetchRoute = async () => {
       try {
-        // For early statuses (placed/accepted/preparing/ready_for_rider),
-        // draw the route from restaurant to customer so user sees the full delivery path.
-        // Once a rider is assigned/picked up, route from rider's current position.
         const hasRider = ['rider_assigned', 'picked_up'].includes(orderStatus);
-        const from = hasRider && riderLocation
+        const from = hasRider && riderLocation && Number.isFinite(riderLocation.lat)
           ? [riderLocation.lat, riderLocation.lng]
-          : [restaurantLocation.lat, restaurantLocation.lng];
-        const to = [customerLocation.lat, customerLocation.lng];
+          : [safeRestLat, safeRestLng];
+        const to = [safeCustLat, safeCustLng];
 
         const res = await fetch(
           `https://router.project-osrm.org/route/v1/driving/${from[1]},${from[0]};${to[1]},${to[0]}?overview=full&geometries=geojson`
@@ -115,23 +151,23 @@ const UserOrderMap: React.FC<UserOrderMapProps> = ({
         if (data.routes?.[0]) {
           const coords = data.routes[0].geometry.coordinates.map(([lng, lat]: number[]) => [lat, lng] as [number, number]);
           setRouteCoords(coords);
+        } else {
+          setRouteCoords([from as [number, number], to as [number, number]]);
         }
       } catch {
-        // Fallback: straight line
+        // Fallback: direct line
         const hasRider = ['rider_assigned', 'picked_up'].includes(orderStatus);
         setRouteCoords([
-          hasRider && riderLocation
+          hasRider && riderLocation && Number.isFinite(riderLocation.lat)
             ? [riderLocation.lat, riderLocation.lng]
-            : [restaurantLocation.lat, restaurantLocation.lng],
-          [customerLocation.lat, customerLocation.lng],
+            : [safeRestLat, safeRestLng],
+          [safeCustLat, safeCustLng],
         ]);
       }
     };
     fetchRoute();
-  }, [orderStatus, riderLocation, restaurantLocation, customerLocation]);
+  }, [orderStatus, riderLocation, safeRestLat, safeRestLng, safeCustLat, safeCustLng]);
 
-  // Socket: parent (OrderPage) owns riderLocation and passes it as a prop.
-  // We just join the order room so chat works.
   useEffect(() => {
     socket?.emit('chat:join_order', orderId);
     return () => {
@@ -139,75 +175,80 @@ const UserOrderMap: React.FC<UserOrderMapProps> = ({
     };
   }, [orderId, socket]);
 
-  const positions: L.LatLngExpression[] = riderLocation
+  const positions: [number, number][] = riderLocation && Number.isFinite(riderLocation.lat)
     ? [
-        [restaurantLocation.lat, restaurantLocation.lng],
+        [safeRestLat, safeRestLng],
         [riderLocation.lat, riderLocation.lng],
-        [customerLocation.lat, customerLocation.lng],
+        [safeCustLat, safeCustLng],
       ]
     : [
-        [restaurantLocation.lat, restaurantLocation.lng],
-        [customerLocation.lat, customerLocation.lng],
+        [safeRestLat, safeRestLng],
+        [safeCustLat, safeCustLng],
       ];
 
   return (
-    <MapContainer
-      center={[restaurantLocation.lat, restaurantLocation.lng]}
-      zoom={13}
-      style={{ width: '100%', height: '100%' }}
-      zoomControl={false}
-      attributionControl={false}
-    >
-      <TileLayer
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        subdomains="abcd"
-        maxZoom={19}
-      />
-
-      {/* Restaurant marker */}
-      <Marker position={[restaurantLocation.lat, restaurantLocation.lng]} icon={restaurantIcon}>
-        <Popup>
-          <div className="text-sm">
-            <p className="font-bold">{restaurantLocation.name}</p>
-          </div>
-        </Popup>
-      </Marker>
-
-      {/* Rider marker */}
-      {riderLocation && (
-        <Marker position={[riderLocation.lat, riderLocation.lng]} icon={riderIcon}>
-          <Popup>Your Delivery Partner</Popup>
-        </Marker>
-      )}
-
-      {/* Customer marker */}
-      <Marker position={[customerLocation.lat, customerLocation.lng]} icon={customerIcon}>
-        <Popup>
-          <div className="text-sm">
-            <p className="font-bold">Delivery Location</p>
-            <p className="text-xs text-gray-600">{customerLocation.address}</p>
-          </div>
-        </Popup>
-      </Marker>
-
-      {/* Route polyline */}
-      {routeCoords.length > 0 && (
-        <Polyline
-          positions={routeCoords}
-          pathOptions={{
-            color: '#f97316',
-            weight: 3,
-            // Solid line when rider is actively moving; dashed while waiting
-            dashArray: ['rider_assigned', 'picked_up'].includes(orderStatus) ? '' : '8 5',
-            opacity: 0.9,
-          }}
+    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+      <MapContainer
+        center={[safeRestLat, safeRestLng]}
+        zoom={13}
+        style={{ width: '100%', height: '100%' }}
+        zoomControl={false}
+        attributionControl={false}
+      >
+        <TileLayer
+          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          subdomains="abcd"
+          maxZoom={19}
         />
-      )}
 
-      <FitBoundsUser positions={positions} />
-      <MapUpdater position={riderLocation} />
-    </MapContainer>
+        {/* Restaurant marker */}
+        <Marker position={[safeRestLat, safeRestLng]} icon={restaurantIcon}>
+          <Popup>
+            <div className="text-sm">
+              <p className="font-bold">{restaurantLocation?.name || "Restaurant"}</p>
+            </div>
+          </Popup>
+        </Marker>
+
+        {/* Rider marker */}
+        {riderLocation && Number.isFinite(riderLocation.lat) && (
+          <Marker position={[riderLocation.lat, riderLocation.lng]} icon={riderIcon}>
+            <Popup>Your Delivery Partner</Popup>
+          </Marker>
+        )}
+
+        {/* Customer marker */}
+        <Marker position={[safeCustLat, safeCustLng]} icon={customerIcon}>
+          <Popup>
+            <div className="text-sm">
+              <p className="font-bold">Delivery Location</p>
+              <p className="text-xs text-gray-600">{customerLocation?.address || ""}</p>
+            </div>
+          </Popup>
+        </Marker>
+
+        {/* Route polyline */}
+        {routeCoords.length > 1 && (
+          <Polyline
+            positions={routeCoords}
+            pathOptions={{
+              color: '#f97316',
+              weight: 3.5,
+              dashArray: ['rider_assigned', 'picked_up'].includes(orderStatus) ? '' : '8 5',
+              opacity: 0.9,
+            }}
+          />
+        )}
+
+        <CameraController
+          positions={positions}
+          riderPosition={riderLocation}
+          orderStatus={orderStatus}
+        />
+        <InvalidateMapSize />
+      </MapContainer>
+    </div>
   );
 };
 
