@@ -14,11 +14,13 @@ dns.lookup = function(hostname, options, callback) {
   }
   origLookup(hostname, options, callback);
 };
+import dotenv from "./services/restaurant/node_modules/dotenv/lib/main.js";
+dotenv.config({ path: "./services/restaurant/.env" });
 import { MongoClient, ObjectId } from "./services/restaurant/node_modules/mongodb/lib/index.js";
 
-const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://your_mongodb_user:your_mongodb_password@localhost:27017/Zomato_Clone?authSource=admin&retryWrites=true&w=majority";
-const RESTAURANT_SERVICE_URL = "http://localhost:5002";
-const INTERNAL_KEY = "your_internal_service_key_here";
+const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/forkful";
+const RESTAURANT_SERVICE_URL = process.env.RESTAURANT_SERVICE || "http://localhost:5002";
+const INTERNAL_KEY = process.env.INTERNAL_SERVICE_KEY || "test_internal_key";
 
 async function runTest() {
   console.log("Connecting to MongoDB...");

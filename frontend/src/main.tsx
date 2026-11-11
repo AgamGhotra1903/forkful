@@ -17,7 +17,7 @@ export const realtimeService = import.meta.env.VITE_REALTIME_SERVICE_URL || "htt
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || "your_google_client_id_here"}>
+    <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || ""}>
       <AppProvider>
         <ThemeProvider>
           <SocketProvider>

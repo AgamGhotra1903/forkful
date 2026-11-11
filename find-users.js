@@ -14,9 +14,11 @@ dns.lookup = function(hostname, options, callback) {
   }
   origLookup(hostname, options, callback);
 };
+import dotenv from "./services/restaurant/node_modules/dotenv/lib/main.js";
+dotenv.config({ path: "./services/restaurant/.env" });
 import { MongoClient } from "./services/restaurant/node_modules/mongodb/lib/index.js";
 
-const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://your_mongodb_user:your_mongodb_password@localhost:27017/Zomato_Clone?authSource=admin&retryWrites=true&w=majority";
+const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/forkful";
 
 async function run() {
   const client = new MongoClient(MONGO_URI);

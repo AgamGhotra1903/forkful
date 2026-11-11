@@ -14,12 +14,14 @@ dns.lookup = function(hostname, options, callback) {
   }
   origLookup(hostname, options, callback);
 };
+import dotenv from "./services/restaurant/node_modules/dotenv/lib/main.js";
+dotenv.config({ path: "./services/restaurant/.env" });
 import { MongoClient, ObjectId } from "./services/restaurant/node_modules/mongodb/lib/index.js";
 import jwt from "./services/restaurant/node_modules/jsonwebtoken/index.js";
 import { io } from "./frontend/node_modules/socket.io-client/build/esm/index.js";
 
-const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://your_mongodb_user:your_mongodb_password@localhost:27017/Zomato_Clone?authSource=admin&retryWrites=true&w=majority";
-const JWT_SECRET = "your_jwt_secret_here";
+const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/forkful";
+const JWT_SECRET = process.env.JWT_SEC || "test_jwt_secret";
 
 const RESTAURANT_SERVICE = "http://localhost:5002";
 const RIDER_SERVICE = "http://localhost:5003";

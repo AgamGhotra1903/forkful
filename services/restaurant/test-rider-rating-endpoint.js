@@ -5,8 +5,8 @@ import dotenv from "dotenv";
 dotenv.config();
 
 async function run() {
-  const MONGO_URI = "mongodb+srv://your_mongodb_user:your_mongodb_password@localhost:27017/?appName=Cluster0";
-  await mongoose.connect(MONGO_URI, { dbName: "Zomato_Clone" });
+  const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/forkful";
+  await mongoose.connect(MONGO_URI, { dbName: process.env.DB_NAME || "Zomato_Clone" });
 
   const Order = mongoose.model("Order", new mongoose.Schema({
     userId: String,
@@ -38,7 +38,7 @@ async function run() {
   const jwt = (await import("jsonwebtoken")).default;
   const token = jwt.sign(
     { user: { _id: order.userId, name: "Test User", email: "test@test.com", role: "customer" } },
-    process.env.JWT_SEC || "your_jwt_secret_here",
+    process.env.JWT_SEC || "test_jwt_secret",
     { expiresIn: "1h" }
   );
 
